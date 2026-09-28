@@ -45,3 +45,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ensure src/lib is not ignored by root python lib/ rule
+!src/lib/
+!src/lib/**
