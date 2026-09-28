@@ -1,0 +1,63 @@
+feature,display_name,mean_abs_shap
+grade_average,Midterm Grade Average,1.5273252865056643
+G2,Period 2 Grade (Midterm 2),1.5087136234790877
+G1,Period 1 Grade (Midterm 1),1.3653948321594271
+grade_velocity,Grade Velocity (G2 - G1),0.630757674116241
+famrel,Family Relationship Quality,0.46051099797432343
+age,Student Age,0.40398382652938053
+Walc,Weekend Alcohol Consumption,0.37609062110817504
+Fjob_other,Father's Occupation: Other,0.30334187795293793
+goout,Socializing with Friends,0.2640643132797933
+traveltime,Commute Travel Time,0.25430785922123783
+Fjob_services,Father's Occupation: Civil Services,0.21962008847741746
+absences,Number of Absences,0.18598124935627847
+Mjob_other,Mother's Occupation: Other,0.17169416750419342
+activities_no,No Extracurriculars,0.16011427710111814
+activities_yes,Extracurricular Activities,0.15923879285838055
+Dalc,Workday Alcohol Consumption,0.1591036988490742
+sex_F,Sex: Female,0.13638070577526198
+sex_M,Sex: Male,0.13550455669194075
+reason_course,School Choice Reason: Course Preference,0.134609403550688
+freetime,Free Time After School,0.13434594292172275
+studytime,Weekly Study Time,0.12472940286433927
+famsize_GT3,Family Size: >3,0.11121696328553721
+famsize_LE3,Family Size: <=3,0.11045860179239848
+health,Current Health Status,0.1043433450502835
+famsup_no,No Family Support,0.10349704413381138
+famsup_yes,Family Educational Support,0.10270145156795168
+chronic_absenteeism,Chronic Absenteeism (>=10 Absences),0.09896391318440363
+romantic_no,Not in Romantic Relationship,0.09158276183368017
+romantic_yes,In a Romantic Relationship,0.09080312544184452
+guardian_father,Guardian: Father,0.0800877892411737
+Mjob_at_home,Mother's Occupation: At Home,0.07831424241376236
+nursery_no,Nursery: no,0.0727936221899528
+nursery_yes,Nursery: yes,0.07224069643735669
+Medu,Mother's Education Level,0.07047235373940125
+reason_home,School Choice Reason: Close to Home,0.06887056567247704
+reason_reputation,School Choice Reason: Reputation,0.06557080080508676
+Pstatus_A,Parents Cohabitation: Apart,0.06388630706781831
+Pstatus_T,Parents Cohabitation: Together,0.06353726576106923
+Mjob_services,Mother's Occupation: Civil Services,0.057748644970791414
+Fedu,Father's Education Level,0.05350448741279861
+reason_other,School Choice Reason: Other,0.037815451420459036
+guardian_other,Guardian: Other,0.03484652950604316
+school_MS,School: Mousinho da Silveira,0.03168355409243793
+school_GP,School: Gabriel Pereira,0.03133539923980172
+Fjob_health,Father's Occupation: Health Care,0.026005489022535692
+address_U,Home Address: Urban,0.023297309019541513
+address_R,Home Address: Rural,0.02267125080267469
+guardian_mother,Guardian: Mother,0.021285770680799353
+failures,Past Subject Failures,0.020108484499797588
+paid_no,No Paid Tutoring,0.017291369932145525
+Fjob_teacher,Father's Occupation: Teacher,0.017053438940993145
+internet_yes,Internet Access at Home,0.01669223010221862
+paid_yes,Extra Paid Tutoring,0.016415996496172418
+Mjob_health,Mother's Occupation: Health Care,0.01632885484698094
+internet_no,No Home Internet,0.016239695277849787
+Mjob_teacher,Mother's Occupation: Teacher,0.015331669918931111
+study_to_fail_ratio,Study-to-Failure Ratio,0.014008919175785584
+Fjob_at_home,Father's Occupation: At Home,0.010983117944047056
+schoolsup_no,No Extra School Support,0.00819577561803501
+schoolsup_yes,Extra Educational School Support,0.007725733324946715
+higher_no,No Higher Education Aspirations,0.0012639192073444203
+higher_yes,Aspirations for Higher Education,0.0011176542788020874

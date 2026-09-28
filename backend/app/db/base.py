@@ -1,0 +1,8 @@
+"""SQLAlchemy DeclarativeBase and centralized metadata registry."""
+
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    """Base declarative class for all EduGuard SQLAlchemy models."""
+    pass

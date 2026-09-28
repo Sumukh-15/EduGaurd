@@ -1,0 +1,33 @@
+============================================================
+EduGuard Exploratory Data Analysis (EDA) Summary
+============================================================
+
+Dataset Dimensions: 395 rows, 33 columns (G3 excluded)
+Target Variable: at_risk (0 = Not At Risk, 1 = At Risk)
+
+Target Class Balance:
+  Class 0 (Not At Risk): 265 (67.09%)
+  Class 1 (At Risk):     130 (32.91%)
+  Imbalance Ratio:       ~1:2.04
+
+Top Predictors by Absolute Correlation with at_risk:
+  - G2          : r = -0.7254 (negative (decreases risk))
+  - G1          : r = -0.6650 (negative (decreases risk))
+  - failures    : r = +0.3377 (positive (increases risk))
+  - goout       : r = +0.1834 (positive (increases risk))
+  - age         : r = +0.1796 (positive (increases risk))
+  - Medu        : r = -0.1154 (negative (decreases risk))
+  - Fedu        : r = -0.1081 (negative (decreases risk))
+  - absences    : r = +0.0922 (positive (increases risk))
+
+Key Group Differences (Mean Values):
+                G1         G2  failures  absences  studytime        age
+at_risk                                                                
+0        12.452830  12.622642  0.158491  5.192453   2.079245  16.535849
+1         7.761538   6.823077  0.692308  6.761538   1.946154  17.023077
+
+Core Takeaways for Modeling:
+1. G2 (r = -0.73) and G1 (r = -0.66) are strongly negatively correlated with risk.
+2. Prior failures (r = +0.36) is the single strongest behavioral positive risk factor.
+3. Absence distribution has heavy right skew (up to 75 absences); log/robust scaling advised.
+4. Strict zero-leakage verified: G3 is completely absent from all features.

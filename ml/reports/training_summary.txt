@@ -1,0 +1,32 @@
+EduGuard ML Pipeline — Training & Cross-Validation Summary
+============================================================
+
+Training Samples: 316 | Test Samples (Held-out): 79
+Class Balance (Train): 104 At-Risk / 316 Total (32.91%)
+CV Strategy: 5-Fold Stratified K-Fold (Shuffle=True, Seed=42)
+Anti-Leakage Safeguard: Preprocessing fit strictly per fold; G3 excluded.
+
+              model recall_mean precision_mean f1_mean roc_auc_mean accuracy_mean
+Logistic Regression      95.24%         82.00%  88.03%       97.36%        91.47%
+      Random Forest      93.33%         83.38%  87.82%       96.88%        91.46%
+            XGBoost      91.43%         84.57%  87.56%       96.62%        91.46%
+
+Aggregate Confusion Matrices:
+  Logistic Regression:
+    TP: 99 (Correctly flagged at-risk)
+    FN: 5 (Missed at-risk)
+    FP: 22 (False alarms)
+    TN: 190 (Correctly flagged not at-risk)
+
+  Random Forest:
+    TP: 97 (Correctly flagged at-risk)
+    FN: 7 (Missed at-risk)
+    FP: 20 (False alarms)
+    TN: 192 (Correctly flagged not at-risk)
+
+  XGBoost:
+    TP: 95 (Correctly flagged at-risk)
+    FN: 9 (Missed at-risk)
+    FP: 18 (False alarms)
+    TN: 194 (Correctly flagged not at-risk)
+
