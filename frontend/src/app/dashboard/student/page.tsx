@@ -87,45 +87,10 @@ export default function StudentDashboardPage() {
               }
             }
           }
-        } else if (historyData.total_records > 0 && !historyData.latest_prediction) {
-          // Telemetry exists but no prediction has been recorded yet:
-          // Request initial prediction for the student's latest recorded telemetry
-          try {
-            setIsEvaluating(true);
-            const predResponse = await predictStudentRisk({ student_id: studentId! });
-            if (!isMounted) return;
-
-            const newPredItem: PredictionHistoryItem = {
-              id: predResponse.prediction_id,
-              student_id: predResponse.student_id,
-              academic_record_id: predResponse.academic_record_id,
-              risk_probability: predResponse.risk_probability,
-              risk_level: predResponse.risk_level,
-              at_risk_binary: predResponse.at_risk_binary,
-              model_version: predResponse.model_version,
-              created_at: predResponse.created_at,
-            };
-            setCurrentPrediction(newPredItem);
-            setFactors(predResponse.top_factors);
-            setCausalDisclaimer(predResponse.causal_disclaimer);
-
-            // Cache in session storage
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem(
-                `eduguard_shap_factors_${studentId}`,
-                JSON.stringify({
-                  prediction_id: predResponse.prediction_id,
-                  factors: predResponse.top_factors,
-                  disclaimer: predResponse.causal_disclaimer,
-                })
-              );
-            }
-          } catch {
-            // Non-critical auto-evaluation failure
-          } finally {
-            if (isMounted) setIsEvaluating(false);
-          }
         }
+        // Note: If no prediction exists yet, EmptyStateCard (type='no_prediction')
+        // is displayed with an explicit 'Generate Risk Evaluation' user action.
+        // Opening or refreshing the page remains strictly read-only.
       } catch (err: unknown) {
         if (isMounted) {
           setErrorMessage(extractErrorMessage(err));
