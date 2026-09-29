@@ -133,25 +133,25 @@ def run_live_tests():
         assert student_other is not None, "STU-1002 not found"
 
         # 13a. Student accessing their own record -> Allowed
-        verify_student_access(student_id=student_own.id, current_user=student_user)
+        verify_student_access(student_id=student_own.id, current_user=student_user, db=db)
         print("[PASS] 13a. RBAC: Student accessing own student_id -> Allowed")
 
         # 13b. Student accessing unlinked/other student record -> 403 Forbidden
         try:
-            verify_student_access(student_id=student_other.id, current_user=student_user)
+            verify_student_access(student_id=student_other.id, current_user=student_user, db=db)
             assert False, "Student should NOT be able to access another student's record"
         except HTTPException as exc:
             assert exc.status_code == 403
             print("[PASS] 13b. RBAC: Student accessing cross-student record -> 403 Forbidden")
 
-        # 13c. Faculty accessing any student record -> Allowed
-        verify_student_access(student_id=student_own.id, current_user=faculty_user)
-        verify_student_access(student_id=student_other.id, current_user=faculty_user)
-        print("[PASS] 13c. RBAC: Faculty accessing student records -> Allowed")
+        # 13c. Faculty accessing assigned student records -> Allowed
+        verify_student_access(student_id=student_own.id, current_user=faculty_user, db=db)
+        verify_student_access(student_id=student_other.id, current_user=faculty_user, db=db)
+        print("[PASS] 13c. RBAC: Faculty accessing assigned student records -> Allowed")
 
         # 13d. Admin accessing any student record -> Allowed
-        verify_student_access(student_id=student_own.id, current_user=admin_user)
-        verify_student_access(student_id=student_other.id, current_user=admin_user)
+        verify_student_access(student_id=student_own.id, current_user=admin_user, db=db)
+        verify_student_access(student_id=student_other.id, current_user=admin_user, db=db)
         print("[PASS] 13d. RBAC: Admin accessing student records -> Allowed")
 
         # 13e. Role requirement: Student accessing faculty role -> 403

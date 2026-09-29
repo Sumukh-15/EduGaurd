@@ -36,23 +36,22 @@ def predict_student_risk(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PredictResponse:
-    """Evaluate academic risk and generate SHAP explanations with strict RBAC boundaries."""
-    # 1. Enforce student ownership boundary
-    verify_student_access(student_id=payload.student_id, current_user=current_user)
+    # 1. Verify student exists
+    student = db.query(Student).filter(Student.id == payload.student_id).first()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student with id {payload.student_id} not found",
+        )
+
+    # 2. Enforce student ownership boundary
+    verify_student_access(student_id=payload.student_id, current_user=current_user, db=db)
 
     # If student user, prohibit authoring new academic telemetry in the prediction request
     if current_user.role == "student" and payload.academic_data is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Students cannot submit new academic telemetry directly. Academic telemetry must be recorded by faculty or administration.",
-        )
-
-    # 2. Verify student exists
-    student = db.query(Student).filter(Student.id == payload.student_id).first()
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student with id {payload.student_id} not found",
         )
 
     # 3. Resolve academic record for inference

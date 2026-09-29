@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import create_access_token, get_password_hash
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.assignment import MentorAssignment
 from backend.app.models.prediction import Prediction
 from backend.app.models.student import Student
 from backend.app.models.user import User
@@ -184,7 +185,7 @@ def other_student(db_session: Session):
 
 @pytest.fixture
 def faculty_user(db_session: Session):
-    """Faculty user fixture."""
+    """Faculty user fixture with assignments for existing students."""
     user = User(
         email="faculty.history@school.edu",
         hashed_password=get_password_hash("FacultyPass123!"),
@@ -194,6 +195,11 @@ def faculty_user(db_session: Session):
     )
     db_session.add(user)
     db_session.commit()
+
+    for s in db_session.query(Student).all():
+        db_session.add(MentorAssignment(faculty_user_id=user.id, student_id=s.id))
+    db_session.commit()
+
     token = create_access_token(subject=user.id, role="faculty")
     return {"user": user, "token": token, "headers": {"Authorization": f"Bearer {token}"}}
 
@@ -394,6 +400,10 @@ def test_faculty_analytics_aggregation_correctness(test_client: TestClient, facu
     p2 = Prediction(student_id=s2.id, risk_probability=0.80, risk_level="High", at_risk_binary=1, model_version="v1.0.0")
     p3 = Prediction(student_id=s3.id, risk_probability=0.55, risk_level="Medium", at_risk_binary=1, model_version="v1.0.0")
     db_session.add_all([p1, p2, p3])
+
+    # Assign students to faculty_user
+    for s in [s1, s2, s3, s4]:
+        db_session.add(MentorAssignment(faculty_user_id=faculty_user["user"].id, student_id=s.id))
     db_session.commit()
 
     res = test_client.get("/api/faculty/analytics", headers=faculty_user["headers"])

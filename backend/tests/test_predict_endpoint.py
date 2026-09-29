@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import create_access_token, get_password_hash
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.assignment import MentorAssignment
 from backend.app.models.explanation import Explanation
 from backend.app.models.prediction import Prediction
 from backend.app.models.student import Student
@@ -150,7 +151,7 @@ def other_student_with_record(db_session: Session):
 
 @pytest.fixture
 def faculty_user(db_session: Session):
-    """Create faculty user and bearer token."""
+    """Create faculty user and bearer token, assigning to existing students."""
     user = User(
         email="faculty.pred@school.edu",
         hashed_password=get_password_hash("FacultyPass123!"),
@@ -161,6 +162,10 @@ def faculty_user(db_session: Session):
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+
+    for s in db_session.query(Student).all():
+        db_session.add(MentorAssignment(faculty_user_id=user.id, student_id=s.id))
+    db_session.commit()
 
     token = create_access_token(subject=user.id, role="faculty")
     return {"user": user, "token": token, "headers": {"Authorization": f"Bearer {token}"}}

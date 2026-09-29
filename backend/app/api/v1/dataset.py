@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import require_roles
 from backend.app.db.session import get_db
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.assignment import MentorAssignment
 from backend.app.models.student import Student
 from backend.app.models.user import User
 from backend.app.schemas.academic_data import AcademicRecordCreate
@@ -42,7 +43,7 @@ PERMISSIBLE_FEATURES: Set[str] = {
 }
 
 # Permissible metadata column headers
-OPTIONAL_METADATA_COLUMNS: Set[str] = {"student_code", "term"}
+OPTIONAL_METADATA_COLUMNS: Set[str] = {"student_code", "term", "mentor_email"}
 ALLOWED_COLUMNS: Set[str] = PERMISSIBLE_FEATURES | OPTIONAL_METADATA_COLUMNS
 
 
@@ -264,8 +265,11 @@ async def upload_dataset(
                 )
             seen_file_keys.add(key)
 
+        mentor_email = row_dict.get("mentor_email", "").strip() or None
+
         validated_rows.append({
             "student_code": student_code,
+            "mentor_email": mentor_email,
             "school": parsed_payload["school"],
             "record": record_schema,
         })
@@ -306,6 +310,32 @@ async def upload_dataset(
                 db.add(student)
                 db.flush()
                 students_created += 1
+
+            # Mentor assignment resolution (explicit mentor_email or uploading faculty auto-assignment)
+            mentor_user_id = None
+            if item.get("mentor_email"):
+                target_user = db.query(User).filter(User.email == item["mentor_email"]).first()
+                if target_user and target_user.role in ("faculty", "admin"):
+                    mentor_user_id = target_user.id
+            elif current_user.role == "faculty":
+                mentor_user_id = current_user.id
+
+            if mentor_user_id:
+                existing_assignment = (
+                    db.query(MentorAssignment)
+                    .filter(
+                        MentorAssignment.faculty_user_id == mentor_user_id,
+                        MentorAssignment.student_id == student.id,
+                    )
+                    .first()
+                )
+                if not existing_assignment:
+                    new_assignment = MentorAssignment(
+                        faculty_user_id=mentor_user_id,
+                        student_id=student.id,
+                    )
+                    db.add(new_assignment)
+                    db.flush()
 
             record_dict = item["record"].model_dump()
             new_record = AcademicRecord(

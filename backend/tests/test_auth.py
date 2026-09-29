@@ -19,6 +19,7 @@ from backend.app.api.deps import (
 )
 from backend.app.models.user import User
 from backend.app.models.student import Student
+from backend.app.models.assignment import MentorAssignment
 
 
 # --- 1. Password Hashing & Verification Tests ---
@@ -313,12 +314,28 @@ def test_verify_student_access_student_cross_student_forbidden(db_session):
     assert "Access denied" in exc_info.value.detail
 
 
-def test_verify_student_access_faculty_and_admin_permitted():
-    """Verify faculty and admin can access any student profile."""
+def test_verify_student_access_faculty_and_admin_permitted(db_session):
+    """Verify faculty (when assigned) and admin (universally) can access student profile."""
     faculty_user = User(id=20, email="fac@s.edu", role="faculty", full_name="Fac", hashed_password="x")
     admin_user = User(id=21, email="adm@s.edu", role="admin", full_name="Adm", hashed_password="x")
+    db_session.add_all([faculty_user, admin_user])
+    db_session.flush()
 
-    # Faculty can access student 100
-    assert verify_student_access(student_id=100, current_user=faculty_user) == faculty_user
-    # Admin can access student 100
-    assert verify_student_access(student_id=100, current_user=admin_user) == admin_user
+    student = Student(id=100, student_code="STU-0100", cohort_year=2026, school="GP")
+    db_session.add(student)
+    db_session.flush()
+
+    assignment = MentorAssignment(faculty_user_id=faculty_user.id, student_id=student.id)
+    db_session.add(assignment)
+    db_session.commit()
+
+    # Faculty can access assigned student 100
+    assert verify_student_access(student_id=100, current_user=faculty_user, db=db_session) == faculty_user
+    # Admin can access student 100 universally
+    assert verify_student_access(student_id=100, current_user=admin_user, db=db_session) == admin_user
+
+    # Faculty cannot access unassigned student 101
+    with pytest.raises(HTTPException) as exc_info:
+        verify_student_access(student_id=101, current_user=faculty_user, db=db_session)
+    assert exc_info.value.status_code == 403
+    assert "not assigned to your mentorship roster" in exc_info.value.detail

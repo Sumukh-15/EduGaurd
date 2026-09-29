@@ -1,7 +1,7 @@
 """SQLAlchemy model for application users."""
 
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -9,6 +9,7 @@ from backend.app.db.base import Base
 
 if TYPE_CHECKING:
     from backend.app.models.student import Student
+    from backend.app.models.assignment import MentorAssignment
 
 
 class User(Base):
@@ -46,6 +47,13 @@ class User(Base):
         "Student",
         back_populates="user",
         uselist=False,
+    )
+
+    # 1:N relationship with mentor assignments (for faculty users)
+    mentor_assignments: Mapped[List["MentorAssignment"]] = relationship(
+        "MentorAssignment",
+        back_populates="faculty_user",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

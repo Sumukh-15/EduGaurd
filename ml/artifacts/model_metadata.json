@@ -2,7 +2,7 @@
   "model_name": "EduGuard Student Academic Risk Classifier",
   "model_version": "v1.0.0",
   "algorithm": "LogisticRegression(C=0.5, class_weight='balanced', solver='lbfgs')",
-  "created_at_utc": "2026-09-28T09:31:59.271395+00:00",
+  "created_at_utc": "2026-09-28T16:13:19.043130+00:00",
   "random_state": 42,
   "environment": {
     "python_version": "3.12",

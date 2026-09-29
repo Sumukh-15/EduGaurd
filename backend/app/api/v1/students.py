@@ -39,7 +39,7 @@ def get_student_profile(
         )
 
     # Enforce ownership boundary: student can only view own profile
-    verify_student_access(student_id=id, current_user=current_user)
+    verify_student_access(student_id=id, current_user=current_user, db=db)
 
     return StudentDetailRead(
         id=student.id,
@@ -77,7 +77,7 @@ def update_student_profile(
         )
 
     # Enforce ownership boundary
-    verify_student_access(student_id=id, current_user=current_user)
+    verify_student_access(student_id=id, current_user=current_user, db=db)
 
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -108,7 +108,7 @@ def get_student_academic_records(
         )
 
     # Enforce ownership boundary
-    verify_student_access(student_id=id, current_user=current_user)
+    verify_student_access(student_id=id, current_user=current_user, db=db)
 
     records = (
         db.query(AcademicRecord)
@@ -139,6 +139,8 @@ def create_student_academic_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Student with id {id} not found",
         )
+
+    verify_student_access(student_id=id, current_user=current_user, db=db)
 
     record_data = record_in.model_dump()
     new_record = AcademicRecord(
@@ -172,7 +174,7 @@ def get_student_history(
         )
 
     # Enforce student ownership boundary
-    verify_student_access(student_id=id, current_user=current_user)
+    verify_student_access(student_id=id, current_user=current_user, db=db)
 
     # Query academic records
     rec_query = db.query(AcademicRecord).filter(AcademicRecord.student_id == id)

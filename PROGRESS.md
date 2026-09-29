@@ -156,6 +156,53 @@ This tracker maintains the real-time status of each project phase, tracking comp
     - **Acceptance Audit Suite (`verify_acceptance_phase2.py`)**: **All 11 acceptance verification phases passed 100%** with zero orphan records and zero data drift.
     - **Alembic Drift Audit (`alembic check`)**: 0 discrepancies detected; live PostgreSQL database schema strictly mirrors SQLAlchemy models.
 
+- [x] **Faculty Student Directory & Risk Triage (PRD User Journey Gap)**:
+  - **Deliverables Implemented & Verified**:
+    - `backend/app/schemas/faculty_students.py`: Defined `FacultyStudentItem` and `FacultyStudentsListResponse` schemas.
+    - `backend/app/api/v1/faculty.py`: Implemented `GET /api/faculty/students` strictly protected with `require_roles("faculty", "admin")`.
+      - Filtering: `risk_level` (High, Medium, Low), `at_risk` (bool), `school`, `search` (student_code case-insensitive substring), `evaluated` (bool).
+      - Sorting: `risk_desc` (highest probability first, unevaluated last), `risk_asc`, `student_code`.
+      - Pagination bounds: `page >= 1`, `1 <= page_size <= 100`.
+      - Zero N+1 query architecture: Correlated scalar subquery for top SHAP factor display name and latest prediction ID subquery executed via single joined query.
+      - Zero target leakage: $G3$ strictly excluded from all schemas and responses.
+    - `backend/tests/test_faculty_students.py`: 17 comprehensive unit tests covering RBAC (student 403, unauthenticated 401, faculty 200, admin 200), all filters, sorting strategies, pagination bounds, empty DB, unevaluated students, top factor label resolution, and anti-leakage ($G3$).
+    - `frontend/src/types/faculty_students.ts`: TypeScript interfaces for student list items, filter params, and responses.
+    - `frontend/src/lib/api/faculty_students.ts`: Typed API client for `getFacultyStudents`.
+    - `frontend/src/components/layout/Sidebar.tsx`: Added "Students" item to `FACULTY_NAV` sidebar.
+    - `frontend/src/app/dashboard/faculty/students/page.tsx`: Full-featured directory view with filter chips (All / High / Medium / Low / Not evaluated), search input, sort selector, table with risk badge, probability bar, top factor, last evaluated date, pagination, and direct row navigation to `/dashboard/faculty/review?id=<id>`.
+    - `frontend/src/app/dashboard/faculty/page.tsx`: Added "High-Risk Students Priority Panel" (top 5 high-risk students) linking directly to the filtered high-risk list.
+  - **Verification Results**:
+    - **Automated Pytest Suite**: **178/178 passed** (36 Phase 1 ML tests + 142 backend tests) with 0 failures.
+    - **Frontend Type Check**: `tsc --noEmit` passed with 0 errors.
+    - **Frontend Linter**: `npm run lint` passed with 0 errors and 0 warnings.
+    - **Frontend Production Build**: `npm run build` compiled all routes with 100% success.
+
+- [x] **Mentor-Student Assignments & Faculty Scoping (PRD Alignment)**:
+  - **Deliverables Implemented & Verified**:
+    - `backend/app/models/assignment.py`: Created `MentorAssignment` model (`mentor_assignments` table with `id`, `faculty_user_id` FK `users.id`, `student_id` FK `students.id`, `created_at`, `UniqueConstraint("faculty_user_id", "student_id")`).
+    - `backend/alembic/versions/d4e5f6a7b8c9_mentor_assignments.py`: Created Alembic migration with foreign key cascades and indexes.
+    - `backend/app/models/user.py` & `backend/app/models/student.py`: Added `mentor_assignments` relationships with cascades.
+    - `backend/app/schemas/assignment.py`: Defined `AssignmentCreateRequest`, `AssignmentItem`, and `AssignmentListResponse`.
+    - `backend/app/api/deps.py`: Updated `verify_student_access(student_id, current_user, db)` to check `MentorAssignment` for `faculty` role, raising `403 Forbidden ("Access denied. This student is not assigned to your mentorship roster.")` on unassigned access.
+    - `backend/app/api/v1/admin.py`: Created admin assignment endpoints:
+      - `POST /api/admin/assignments` (assign multiple students to a faculty user, idempotent, admin-only).
+      - `DELETE /api/admin/assignments/{id}` (delete assignment by ID, admin-only).
+      - `GET /api/admin/assignments` (list all assignments or filter by `faculty_user_id`, admin-only).
+    - `backend/app/api/v1/faculty.py`:
+      - `GET /api/faculty/students`: Scoped query to assigned students only for `faculty` role; returns empty list if zero assignments. Universal visibility preserved for `admin`.
+      - `GET /api/faculty/analytics`: Scoped metrics calculations strictly to assigned students for `faculty` role; returns zeroed metrics if zero assignments. Universal visibility preserved for `admin`.
+    - `backend/app/api/v1/students.py`: Enforced `verify_student_access(student_id=id, current_user=current_user, db=db)` across student profile GET, demographic PATCH, academic telemetry GET/POST, and history trajectory GET.
+    - `backend/app/api/v1/predict.py`: Validated student existence and enforced `verify_student_access(student_id=payload.student_id, current_user=current_user, db=db)` on model inference.
+    - `backend/app/api/v1/recommendations.py`: Enforced `verify_student_access(student_id=student_id, current_user=current_user, db=db)` on recommendation retrieval.
+    - `backend/app/api/v1/dataset.py`: Added `mentor_email` to optional metadata columns; supports explicit assignment via `mentor_email` or auto-assignment to uploading faculty member.
+    - `backend/app/db/seed.py`: Seeded assignments for `faculty@school.edu` to `STU-1001` and `STU-1002`; seeded unassigned `faculty2@school.edu`.
+    - `backend/tests/test_mentor_assignments.py`: 12 comprehensive unit and integration tests covering admin CRUD, RBAC, scoping across directory, analytics, individual student access, and batch dataset upload assignments.
+  - **Verification Results**:
+    - **Automated Pytest Suite**: **192/192 passed** (36 Phase 1 ML tests + 156 backend tests) with 0 failures in 140s.
+    - **Frontend Production Build**: `npm run build` compiled all routes with 100% success.
+    - **Zero Target Leakage ($G3$)**: Maintained across all assignment models, schemas, and routes.
+    - **Append-Only Invariant**: Predictions and explanations remain strictly append-only.
+
 ### Known Assumptions & Technical Debt
 1. **Sample Size & Cohort Bounds**: Dataset consists of 395 secondary students from 2 Portuguese schools in 2008 for Mathematics. Not representative of broad higher education without local recalibration.
 2. **Chronic Absenteeism Threshold**: $\text{absences} \ge 10$ is a project-defined heuristic assumption rather than an immutable regulatory standard.

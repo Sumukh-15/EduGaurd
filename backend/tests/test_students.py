@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import create_access_token, get_password_hash
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.assignment import MentorAssignment
 from backend.app.models.student import Student
 from backend.app.models.user import User
 
@@ -110,7 +111,7 @@ def student_fixture_b(db_session: Session):
 
 @pytest.fixture
 def faculty_fixture(db_session: Session):
-    """Create faculty user and token."""
+    """Create faculty user and token, auto-assigning student_fixture_a if present."""
     user = User(
         email="prof.clark@school.edu",
         hashed_password=get_password_hash("FacultyPass123!"),
@@ -121,6 +122,12 @@ def faculty_fixture(db_session: Session):
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+
+    student_a = db_session.query(Student).filter(Student.student_code == "STU-0001").first()
+    if student_a:
+        assignment = MentorAssignment(faculty_user_id=user.id, student_id=student_a.id)
+        db_session.add(assignment)
+        db_session.commit()
 
     token = create_access_token(subject=user.id, role="faculty")
     return {"user": user, "token": token, "headers": {"Authorization": f"Bearer {token}"}}
@@ -173,7 +180,7 @@ def test_get_student_profile_cross_student_forbidden(test_client: TestClient, st
 
 
 def test_get_student_profile_faculty_allowed(test_client: TestClient, student_fixture_a, faculty_fixture):
-    """Faculty members are authorized to view any student's profile."""
+    """Faculty members are authorized to view assigned student profiles."""
     student_id = student_fixture_a["student"].id
     headers = faculty_fixture["headers"]
 
@@ -182,6 +189,16 @@ def test_get_student_profile_faculty_allowed(test_client: TestClient, student_fi
     data = resp.json()
     assert data["id"] == student_id
     assert data["student_code"] == "STU-0001"
+
+
+def test_get_student_profile_faculty_unassigned_forbidden(test_client: TestClient, student_fixture_b, faculty_fixture):
+    """Faculty members receive 403 Forbidden when attempting to view an unassigned student."""
+    student_id = student_fixture_b["student"].id
+    headers = faculty_fixture["headers"]
+
+    resp = test_client.get(f"/api/students/{student_id}", headers=headers)
+    assert resp.status_code == 403
+    assert "not assigned to your mentorship roster" in resp.json()["detail"]
 
 
 def test_get_student_profile_admin_allowed(test_client: TestClient, student_fixture_a, admin_fixture):

@@ -12,6 +12,7 @@ import {
   LogOut,
   UploadCloud,
   UserCheck,
+  Users,
   X,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -52,6 +53,12 @@ const FACULTY_NAV: NavItem[] = [
     href: "/dashboard/faculty",
     icon: BarChart3,
     description: "Cohort distribution & risk metrics",
+  },
+  {
+    label: "Students",
+    href: "/dashboard/faculty/students",
+    icon: Users,
+    description: "Cohort roster & risk triage",
   },
   {
     label: "Student Review",

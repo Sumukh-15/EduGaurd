@@ -9,6 +9,7 @@ from backend.app.models.academic_record import AcademicRecord
 from backend.app.models.prediction import Prediction
 from backend.app.models.explanation import Explanation
 from backend.app.models.recommendation import Recommendation
+from backend.app.models.assignment import MentorAssignment
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "Prediction",
     "Explanation",
     "Recommendation",
+    "MentorAssignment",
 ]

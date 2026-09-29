@@ -24,6 +24,16 @@ from backend.app.schemas.recommendation import (
     StudentRecommendationsResponse,
 )
 
+from backend.app.schemas.faculty_students import (
+    FacultyStudentItem,
+    FacultyStudentsListResponse,
+)
+from backend.app.schemas.assignment import (
+    AssignmentCreateRequest,
+    AssignmentItem,
+    AssignmentListResponse,
+)
+
 __all__ = [
     "LoginRequest",
     "TokenPayload",
@@ -43,4 +53,9 @@ __all__ = [
     "RecommendationBase",
     "RecommendationRead",
     "StudentRecommendationsResponse",
+    "FacultyStudentItem",
+    "FacultyStudentsListResponse",
+    "AssignmentCreateRequest",
+    "AssignmentItem",
+    "AssignmentListResponse",
 ]

@@ -15,6 +15,7 @@ from backend.app.core.security import get_password_hash
 from backend.app.db.session import SessionLocal
 from backend.app.models.user import User
 from backend.app.models.student import Student
+from backend.app.models.assignment import MentorAssignment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eduguard.seed")
@@ -42,6 +43,13 @@ def seed_test_data(db: Session) -> dict:
             "full_name": "Test Faculty",
             "role": "faculty",
             "password": "TestFaculty123!",
+            "student_code": None,
+        },
+        {
+            "email": "faculty2@school.edu",
+            "full_name": "Unassigned Faculty",
+            "role": "faculty",
+            "password": "TestFaculty456!",
             "student_code": None,
         },
         {
@@ -104,6 +112,26 @@ def seed_test_data(db: Session) -> dict:
         db.add(unlinked_student)
         db.flush()
         logger.info("Created unlinked student profile: STU-1002")
+
+    # Mentor assignments: assign faculty@school.edu to STU-1001 and STU-1002
+    faculty_user = db.query(User).filter(User.email == "faculty@school.edu").first()
+    stu_1001 = db.query(Student).filter(Student.student_code == "STU-1001").first()
+    stu_1002 = db.query(Student).filter(Student.student_code == "STU-1002").first()
+
+    for s in [stu_1001, stu_1002]:
+        if s and faculty_user:
+            assign = (
+                db.query(MentorAssignment)
+                .filter(
+                    MentorAssignment.faculty_user_id == faculty_user.id,
+                    MentorAssignment.student_id == s.id,
+                )
+                .first()
+            )
+            if not assign:
+                db.add(MentorAssignment(faculty_user_id=faculty_user.id, student_id=s.id))
+                db.flush()
+                logger.info("Assigned %s to %s", s.student_code, faculty_user.email)
 
     db.commit()
     logger.info("Database seeding completed successfully.")

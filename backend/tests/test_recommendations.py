@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.security import create_access_token, get_password_hash
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.assignment import MentorAssignment
 from backend.app.models.prediction import Prediction
 from backend.app.models.recommendation import Recommendation
 from backend.app.models.student import Student
@@ -179,6 +180,10 @@ def auth_tokens(db_session: Session):
         is_active=True,
     )
     db_session.add(u_adm)
+    db_session.flush()
+
+    db_session.add(MentorAssignment(faculty_user_id=u_fac.id, student_id=s1.id))
+    db_session.add(MentorAssignment(faculty_user_id=u_fac.id, student_id=s2.id))
     db_session.commit()
 
     return {
@@ -224,7 +229,7 @@ def test_recommendations_cross_student_forbidden(test_client: TestClient, auth_t
 
 
 def test_recommendations_faculty_access_allowed(test_client: TestClient, auth_tokens):
-    """Faculty user must be allowed to access any student's recommendations."""
+    """Faculty user must be allowed to access assigned student's recommendations."""
     s2_id = auth_tokens["student2_id"]
     headers = {"Authorization": f"Bearer {auth_tokens['faculty_token']}"}
     res = test_client.get(f"/api/recommendations/{s2_id}", headers=headers)
@@ -232,6 +237,18 @@ def test_recommendations_faculty_access_allowed(test_client: TestClient, auth_to
     data = res.json()
     assert data["student_id"] == s2_id
     assert data["total_recommendations"] == 4
+
+
+def test_recommendations_faculty_unassigned_forbidden(test_client: TestClient, auth_tokens, db_session: Session):
+    """Faculty user accessing an unassigned student receives 403 Forbidden."""
+    unassigned_student = Student(student_code="STU-REC-UNASSIGNED", school="GP", cohort_year=2026)
+    db_session.add(unassigned_student)
+    db_session.commit()
+
+    headers = {"Authorization": f"Bearer {auth_tokens['faculty_token']}"}
+    res = test_client.get(f"/api/recommendations/{unassigned_student.id}", headers=headers)
+    assert res.status_code == 403
+    assert "not assigned to your mentorship roster" in res.json()["detail"]
 
 
 def test_recommendations_admin_access_allowed(test_client: TestClient, auth_tokens):
@@ -524,6 +541,12 @@ def test_student_with_no_academic_data(test_client: TestClient, auth_tokens, db_
         school="GP",
     )
     db_session.add(s_empty)
+    db_session.flush()
+
+    fac_user = db_session.query(User).filter(User.email == "faculty.rec@school.edu").first()
+    if fac_user:
+        db_session.add(MentorAssignment(faculty_user_id=fac_user.id, student_id=s_empty.id))
+
     db_session.commit()
 
     headers = {"Authorization": f"Bearer {auth_tokens['faculty_token']}"}

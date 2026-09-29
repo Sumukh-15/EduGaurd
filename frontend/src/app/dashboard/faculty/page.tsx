@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   CheckCircle,
   Cpu,
@@ -22,8 +23,10 @@ import RiskDistributionChart from "@/components/analytics/RiskDistributionChart"
 import SchoolBreakdownCard from "@/components/analytics/SchoolBreakdownCard";
 import { useAuth } from "@/context/AuthContext";
 import { getFacultyAnalytics } from "@/lib/api/analytics";
+import { getFacultyStudents } from "@/lib/api/faculty_students";
 import { ApiClientError } from "@/lib/api/client";
 import { FacultyAnalyticsResponse } from "@/types/analytics";
+import { FacultyStudentItem } from "@/types/faculty_students";
 
 function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -41,6 +44,7 @@ export default function FacultyDashboardPage() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<FacultyAnalyticsResponse | null>(null);
+  const [highRiskStudents, setHighRiskStudents] = useState<FacultyStudentItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isLoading = !dataLoaded && !errorMessage;
@@ -51,6 +55,22 @@ export default function FacultyDashboardPage() {
       setErrorMessage(null);
       const data = await getFacultyAnalytics();
       setAnalytics(data);
+
+      if (data.evaluated_students > 0) {
+        try {
+          const highRiskRes = await getFacultyStudents({
+            risk_level: "High",
+            page_size: 5,
+            sort: "risk_desc",
+          });
+          setHighRiskStudents(highRiskRes.items);
+        } catch {
+          // Non-blocking fallback for high-risk preview
+          setHighRiskStudents([]);
+        }
+      } else {
+        setHighRiskStudents([]);
+      }
     } catch (err: unknown) {
       setErrorMessage(extractErrorMessage(err));
     } finally {
@@ -67,6 +87,22 @@ export default function FacultyDashboardPage() {
         const data = await getFacultyAnalytics();
         if (isMounted) {
           setAnalytics(data);
+          if (data.evaluated_students > 0) {
+            try {
+              const highRiskRes = await getFacultyStudents({
+                risk_level: "High",
+                page_size: 5,
+                sort: "risk_desc",
+              });
+              if (isMounted) {
+                setHighRiskStudents(highRiskRes.items);
+              }
+            } catch {
+              if (isMounted) {
+                setHighRiskStudents([]);
+              }
+            }
+          }
         }
       } catch (err: unknown) {
         if (isMounted) {
@@ -261,8 +297,118 @@ export default function FacultyDashboardPage() {
               <SchoolBreakdownCard schools={analytics.school_distribution} />
             )}
 
+            {/* High-Risk Students Priority Panel (Top 5) */}
+            {analytics.evaluated_students > 0 && (
+              <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                        High-Risk Students Priority Panel
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Top priority cohort students flagged by the model for academic risk intervention.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Link
+                    href="/dashboard/faculty/students?risk_level=High"
+                    className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1.5 self-start sm:self-auto py-1.5 px-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 transition-colors"
+                  >
+                    <span>View All High-Risk Students ({analytics.risk_distribution.high})</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+
+                {highRiskStudents.length > 0 ? (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {highRiskStudents.map((st) => {
+                      const prob =
+                        st.latest_risk_probability !== null
+                          ? Math.round(st.latest_risk_probability * 100)
+                          : 0;
+                      return (
+                        <Link
+                          key={st.id}
+                          href={`/dashboard/faculty/review?id=${st.id}`}
+                          className="py-3 px-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="font-mono font-bold text-sm text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                              {st.student_code}
+                            </span>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {st.school || "Campus"}
+                            </span>
+                            {st.top_factor_label && (
+                              <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs hidden md:inline">
+                                Top Driver:{" "}
+                                <strong className="text-slate-700 dark:text-slate-300 font-medium">
+                                  {st.top_factor_label}
+                                </strong>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-4 self-end sm:self-auto">
+                            <div className="text-right">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                                  {prob}% Risk
+                                </span>
+                                <div className="w-16 h-1.5 bg-rose-100 dark:bg-rose-950/60 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-rose-500 rounded-full"
+                                    style={{ width: `${prob}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:underline">
+                              Inspect &rarr;
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                    <span>No students are currently flagged in the High-Risk tier.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Operational Navigation Shortcuts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
+              <Link
+                href="/dashboard/faculty/students"
+                className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group flex items-start gap-4"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      Cohort Students
+                    </h3>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                      Directory
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Filter, search, and triage all active enrolled students by predictive risk level and SHAP factors.
+                  </p>
+                </div>
+              </Link>
+
               <Link
                 href="/dashboard/faculty/review"
                 className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group flex items-start gap-4"
@@ -280,7 +426,7 @@ export default function FacultyDashboardPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                    Inspect specific student academic trajectories and SHAP explanations by numeric ID (not a student directory).
+                    Inspect specific student academic trajectories and SHAP explanations by numeric ID.
                   </p>
                 </div>
               </Link>

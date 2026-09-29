@@ -52,7 +52,7 @@ def get_student_recommendations(
         )
 
     # 2. Enforce RBAC and student ownership boundary
-    verify_student_access(student_id=student_id, current_user=current_user)
+    verify_student_access(student_id=student_id, current_user=current_user, db=db)
 
     # 3. Retrieve or evaluate deterministic recommendations
     _, recs, latest_prediction, academic_record = (

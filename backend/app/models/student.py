@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from backend.app.models.academic_record import AcademicRecord
     from backend.app.models.prediction import Prediction
     from backend.app.models.recommendation import Recommendation
+    from backend.app.models.assignment import MentorAssignment
 
 
 class Student(Base):
@@ -76,6 +77,11 @@ class Student(Base):
         back_populates="student",
         cascade="all, delete-orphan",
         order_by="Recommendation.created_at.desc()",
+    )
+    mentor_assignments: Mapped[List["MentorAssignment"]] = relationship(
+        "MentorAssignment",
+        back_populates="student",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

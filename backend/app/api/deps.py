@@ -10,6 +10,7 @@ from backend.app.core.config import settings
 from backend.app.core.security import decode_access_token
 from backend.app.db.session import get_db
 from backend.app.models.user import User
+from backend.app.models.assignment import MentorAssignment
 
 # OAuth2 scheme pointing to token endpoint
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
@@ -75,16 +76,40 @@ def require_roles(*roles: str) -> Callable[[User], User]:
 def verify_student_access(
     student_id: int,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> User:
     """Enforce strict student ownership and privacy boundaries.
 
     Authorization Rules:
-      - faculty / admin: Permitted to access any student profile, history, or telemetry.
+      - admin: Permitted to access any student profile, history, or telemetry.
+      - faculty: Permitted ONLY if student_id is assigned to them via MentorAssignment.
       - student: Permitted ONLY if student_id matches their linked Student profile id.
                  Cross-student access strictly returns 403 Forbidden.
     """
-    if current_user.role in ("faculty", "admin"):
+    if current_user.role == "admin":
         return current_user
+
+    if current_user.role == "faculty":
+        if db is not None and isinstance(db, Session):
+            assignment = (
+                db.query(MentorAssignment)
+                .filter(
+                    MentorAssignment.faculty_user_id == current_user.id,
+                    MentorAssignment.student_id == student_id,
+                )
+                .first()
+            )
+            if not assignment:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied. This student is not assigned to your mentorship roster.",
+                )
+            return current_user
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Database session required to verify faculty mentor assignment.",
+            )
 
     if current_user.role == "student":
         if not current_user.student or current_user.student.id != student_id:
