@@ -1,15 +1,17 @@
 """Serialization and export module for EduGuard machine learning artifacts.
 
 Persists:
-1. ml/artifacts/model_v1.joblib: The complete, fitted scikit-learn Pipeline
-   (AcademicFeatureEngineer + ColumnTransformer + LogisticRegression).
+1. ml/artifacts/model_v1_1.joblib: The complete, fitted scikit-learn Pipeline
+   with tuned hyperparameters and leak-free preprocessing.
+   (model_v1.joblib is preserved for backward traceability).
 2. ml/artifacts/model_metadata.json: Complete runtime schema, feature ordering,
-   risk thresholds, version tags, environment dependencies, and test metrics.
+   environment-backed risk thresholds, version tags (v1.1.0), dependencies, and test metrics.
 
 Provides clean load/predict utility functions for backend API consumption.
 """
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Dict, Any, Tuple, Union
 import json
@@ -27,32 +29,70 @@ from ml.features import (
 )
 from ml.train import build_candidate_pipelines, RANDOM_STATE
 
-# Centralized risk probability threshold definitions (single source of truth)
-RISK_THRESHOLDS = {
-    "low_max": 0.40,
-    "medium_max": 0.70,
-    "binary_decision_threshold": 0.50,
-    "categories": {
-        "Low": [0.0, 0.40],
-        "Medium": [0.40, 0.70],
-        "High": [0.70, 1.0]
+MODEL_VERSION = "v1.1.0"
+
+# Environment-backed risk thresholds
+try:
+    from backend.app.core.config import settings
+    _DEFAULT_LOW_MAX = settings.RISK_LOW_MAX
+    _DEFAULT_HIGH_MIN = settings.RISK_HIGH_MIN
+    _DEFAULT_BINARY_THRESH = settings.BINARY_THRESHOLD
+except Exception:
+    _DEFAULT_LOW_MAX = float(os.getenv("RISK_LOW_MAX", "0.40"))
+    _DEFAULT_HIGH_MIN = float(os.getenv("RISK_HIGH_MIN", "0.70"))
+    _DEFAULT_BINARY_THRESH = float(os.getenv("BINARY_THRESHOLD", "0.50"))
+
+
+def get_risk_thresholds(
+    low_max: float = None,
+    high_min: float = None,
+    binary_threshold: float = None
+) -> Dict[str, Any]:
+    """Generates centralized risk threshold mapping with low < high validation."""
+    l_max = _DEFAULT_LOW_MAX if low_max is None else low_max
+    h_min = _DEFAULT_HIGH_MIN if high_min is None else high_min
+    b_thresh = _DEFAULT_BINARY_THRESH if binary_threshold is None else binary_threshold
+
+    if not (0.0 <= l_max < h_min <= 1.0):
+        raise ValueError(
+            f"Invalid thresholds: low_max ({l_max}) must be strictly less than "
+            f"high_min ({h_min}) and both must lie in [0.0, 1.0]."
+        )
+    if not (0.0 <= b_thresh <= 1.0):
+        raise ValueError(f"Invalid binary_threshold ({b_thresh}): must lie in [0.0, 1.0].")
+
+    return {
+        "low_max": l_max,
+        "medium_max": h_min,
+        "binary_decision_threshold": b_thresh,
+        "categories": {
+            "Low": [0.0, l_max],
+            "Medium": [l_max, h_min],
+            "High": [h_min, 1.0]
+        }
     }
-}
 
 
-def classify_risk_level(prob: float) -> str:
+# Centralized risk probability threshold definitions (single source of truth)
+RISK_THRESHOLDS = get_risk_thresholds()
+
+
+def classify_risk_level(prob: float, thresholds: Dict[str, Any] = None) -> str:
     """Classifies risk level based on centralized threshold boundaries."""
-    if prob >= RISK_THRESHOLDS["medium_max"]:
+    t = thresholds or RISK_THRESHOLDS
+    if prob >= t["medium_max"]:
         return "High"
-    if prob >= RISK_THRESHOLDS["low_max"]:
+    if prob >= t["low_max"]:
         return "Medium"
     return "Low"
 
 
 def build_and_fit_final_pipeline(
-    train_split_path: str | Path = "data/processed/train_split.csv"
-) -> Tuple[Any, pd.DataFrame, pd.Series]:
-    """Fits the winning Logistic Regression pipeline on the complete training split."""
+    train_split_path: str | Path = "data/processed/train_split.csv",
+    comparison_csv: str | Path = "ml/reports/model_comparison.csv",
+    tuning_csv: str | Path = "ml/reports/tuning_results.csv"
+) -> Tuple[Any, pd.DataFrame, pd.Series, str, Dict[str, Any]]:
+    """Fits the selected winning pipeline on the complete training split."""
     train_path = Path(train_split_path)
     if not train_path.exists():
         raise FileNotFoundError(f"Training split file missing at: {train_path.resolve()}")
@@ -63,10 +103,37 @@ def build_and_fit_final_pipeline(
 
     validate_feature_input(X_train)
 
-    pipeline = build_candidate_pipelines()["Logistic Regression"]
+    # Determine winning model from comparison CSV if available
+    winner_name = "Logistic Regression"
+    comp_path = Path(comparison_csv)
+    if comp_path.exists():
+        df_comp = pd.read_csv(comp_path)
+        sorted_comp = df_comp.sort_values(
+            by=["recall_mean", "f1_mean", "roc_auc_mean"],
+            ascending=[False, False, False]
+        )
+        winner_name = sorted_comp.iloc[0]["model"]
+
+    # Read tuned parameters from tuning_results.csv if available
+    tuned_params_dict = {}
+    tune_path = Path(tuning_csv)
+    if tune_path.exists():
+        df_tune = pd.read_csv(tune_path)
+        for _, row in df_tune.iterrows():
+            tuned_params_dict[row["model"]] = json.loads(row["best_params"])
+
+    candidates = build_candidate_pipelines(tuned_params=tuned_params_dict)
+    if winner_name not in candidates:
+        if winner_name == "SVM" and "Support Vector Machine" in candidates:
+            winner_name = "Support Vector Machine"
+        else:
+            winner_name = "Logistic Regression"
+
+    pipeline = candidates[winner_name]
     pipeline.fit(X_train, y_train)
 
-    return pipeline, X_train, y_train
+    winning_params = tuned_params_dict.get(winner_name, {})
+    return pipeline, X_train, y_train, winner_name, winning_params
 
 
 def export_pipeline_artifacts(
@@ -79,7 +146,7 @@ def export_pipeline_artifacts(
     rep_path = Path(reports_dir)
 
     # 1. Fit winning pipeline on training split (test set strictly preserved)
-    pipeline, X_train, y_train = build_and_fit_final_pipeline()
+    pipeline, X_train, y_train, winner_name, winning_params = build_and_fit_final_pipeline()
 
     # 2. Extract feature metadata
     feature_names = get_feature_names_from_pipeline(pipeline.named_steps["features"])
@@ -94,8 +161,10 @@ def export_pipeline_artifacts(
     # 4. Construct comprehensive metadata dictionary
     metadata: Dict[str, Any] = {
         "model_name": "EduGuard Student Academic Risk Classifier",
-        "model_version": "v1.0.0",
-        "algorithm": "LogisticRegression(C=0.5, class_weight='balanced', solver='lbfgs')",
+        "model_version": MODEL_VERSION,
+        "selected_model": winner_name,
+        "algorithm": f"{winner_name} with tuned hyperparameters: {json.dumps(winning_params)}",
+        "tuned_hyperparameters": winning_params,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "random_state": RANDOM_STATE,
         "environment": {
@@ -126,12 +195,17 @@ def export_pipeline_artifacts(
         )
     }
 
-    # 5. Persist artifacts
-    model_file = art_path / "model_v1.joblib"
+    # 5. Persist artifacts: save model_v1_1.joblib while keeping model_v1.joblib
+    model_file = art_path / "model_v1_1.joblib"
     metadata_file = art_path / "model_metadata.json"
 
     # Save fitted pipeline
     joblib.dump(pipeline, model_file, compress=3)
+
+    # If model_v1.joblib does not exist, create it as baseline copy
+    v1_file = art_path / "model_v1.joblib"
+    if not v1_file.exists():
+        joblib.dump(pipeline, v1_file, compress=3)
 
     # Save metadata JSON
     with open(metadata_file, "w", encoding="utf-8") as f:
@@ -143,11 +217,15 @@ def export_pipeline_artifacts(
     return model_file, metadata_file
 
 
-def load_model_pipeline(model_path: str | Path = "ml/artifacts/model_v1.joblib"):
-    """Loads the serialized scikit-learn pipeline from disk."""
+def load_model_pipeline(model_path: str | Path = "ml/artifacts/model_v1_1.joblib"):
+    """Loads the serialized scikit-learn pipeline from disk (falls back to model_v1.joblib if needed)."""
     path = Path(model_path)
     if not path.exists():
-        raise FileNotFoundError(f"Model artifact not found at: {path.resolve()}")
+        fallback = Path("ml/artifacts/model_v1.joblib")
+        if fallback.exists():
+            path = fallback
+        else:
+            raise FileNotFoundError(f"Model artifact not found at: {path.resolve()}")
     return joblib.load(path)
 
 
@@ -163,7 +241,7 @@ def load_model_metadata(metadata_path: str | Path = "ml/artifacts/model_metadata
 def predict_student(
     student_data: Union[Dict[str, Any], pd.Series, pd.DataFrame],
     pipeline=None,
-    model_path: str | Path = "ml/artifacts/model_v1.joblib"
+    model_path: str | Path = "ml/artifacts/model_v1_1.joblib"
 ) -> Dict[str, Any]:
     """Inference helper for raw student records."""
     if pipeline is None:
@@ -193,7 +271,7 @@ def predict_student(
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("EduGuard Sub-step 1.6: Pipeline Serialization & Metadata Export")
+    print("EduGuard ML Pipeline Serialization & Metadata Export (v1.1.0)")
     print("=" * 60)
 
     model_path, meta_path = export_pipeline_artifacts()
@@ -207,6 +285,8 @@ if __name__ == "__main__":
 
     prediction = predict_student(sample_student, pipeline=loaded_pipe)
     print(f"\nInference Verification on Sample Student:")
+    print(f"  Selected Model:   {loaded_meta.get('selected_model')}")
+    print(f"  Model Version:    {loaded_meta.get('model_version')}")
     print(f"  Risk Level:       {prediction['risk_level']}")
     print(f"  Risk Probability: {prediction['risk_probability']*100:.2f}%")
     print(f"  Binary Label:     {prediction['at_risk_binary']}")

@@ -6,27 +6,34 @@ Class Balance (Train): 104 At-Risk / 316 Total (32.91%)
 CV Strategy: 5-Fold Stratified K-Fold (Shuffle=True, Seed=42)
 Anti-Leakage Safeguard: Preprocessing fit strictly per fold; G3 excluded.
 
-              model recall_mean precision_mean f1_mean roc_auc_mean accuracy_mean
-Logistic Regression      95.24%         82.00%  88.03%       97.36%        91.47%
-      Random Forest      93.33%         83.38%  87.82%       96.88%        91.46%
-            XGBoost      91.43%         84.57%  87.56%       96.62%        91.46%
+                 model recall_mean precision_mean f1_mean roc_auc_mean accuracy_mean
+   Logistic Regression      99.05%         66.62%  79.49%       97.19%        82.93%
+         Random Forest      93.33%         82.16%  87.10%       95.56%        90.84%
+               XGBoost      95.24%         83.70%  88.81%       96.75%        92.09%
+Support Vector Machine      96.19%         72.58%  82.53%       95.71%        86.41%
 
 Aggregate Confusion Matrices:
   Logistic Regression:
-    TP: 99 (Correctly flagged at-risk)
-    FN: 5 (Missed at-risk)
-    FP: 22 (False alarms)
-    TN: 190 (Correctly flagged not at-risk)
+    TP: 103 (Correctly flagged at-risk)
+    FN: 1 (Missed at-risk)
+    FP: 53 (False alarms)
+    TN: 159 (Correctly flagged not at-risk)
 
   Random Forest:
     TP: 97 (Correctly flagged at-risk)
     FN: 7 (Missed at-risk)
+    FP: 22 (False alarms)
+    TN: 190 (Correctly flagged not at-risk)
+
+  XGBoost:
+    TP: 99 (Correctly flagged at-risk)
+    FN: 5 (Missed at-risk)
     FP: 20 (False alarms)
     TN: 192 (Correctly flagged not at-risk)
 
-  XGBoost:
-    TP: 95 (Correctly flagged at-risk)
-    FN: 9 (Missed at-risk)
-    FP: 18 (False alarms)
-    TN: 194 (Correctly flagged not at-risk)
+  Support Vector Machine:
+    TP: 100 (Correctly flagged at-risk)
+    FN: 4 (Missed at-risk)
+    FP: 39 (False alarms)
+    TN: 173 (Correctly flagged not at-risk)
 

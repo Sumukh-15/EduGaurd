@@ -40,7 +40,7 @@ class Prediction(Base):
     risk_probability: Mapped[float] = mapped_column(Float, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(10), nullable=False)  # "Low", "Medium", "High"
     at_risk_binary: Mapped[int] = mapped_column(Integer, nullable=False)  # 0 or 1
-    model_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1.0.0")
+    model_version: Mapped[str] = mapped_column(String(20), nullable=False, default="v1.1.0")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -6,7 +6,7 @@ Secrets are kept strictly out of source control.
 
 from pathlib import Path
 from typing import List, Union
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,8 +39,13 @@ class Settings(BaseSettings):
     ]
 
     # Machine Learning artifact paths (relative to project root or absolute)
-    MODEL_PATH: str = "ml/artifacts/model_v1.joblib"
+    MODEL_PATH: str = "ml/artifacts/model_v1_1.joblib"
     METADATA_PATH: str = "ml/artifacts/model_metadata.json"
+
+    # Configurable risk thresholds
+    RISK_LOW_MAX: float = 0.40
+    RISK_HIGH_MIN: float = 0.70
+    BINARY_THRESHOLD: float = 0.50
 
     # Pydantic Settings configuration
     model_config = SettingsConfigDict(
@@ -49,6 +54,20 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_risk_thresholds(self) -> "Settings":
+        """Validate risk threshold bounds and low < high ordering."""
+        if not (0.0 <= self.RISK_LOW_MAX < self.RISK_HIGH_MIN <= 1.0):
+            raise ValueError(
+                f"Invalid risk thresholds: RISK_LOW_MAX ({self.RISK_LOW_MAX}) must be strictly less than "
+                f"RISK_HIGH_MIN ({self.RISK_HIGH_MIN}) and both must lie in [0.0, 1.0]."
+            )
+        if not (0.0 <= self.BINARY_THRESHOLD <= 1.0):
+            raise ValueError(
+                f"Invalid BINARY_THRESHOLD ({self.BINARY_THRESHOLD}): must lie in [0.0, 1.0]."
+            )
+        return self
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod

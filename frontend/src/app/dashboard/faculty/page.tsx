@@ -283,8 +283,68 @@ export default function FacultyDashboardPage() {
               </div>
             )}
 
-            {/* Risk Distribution Chart */}
-            {analytics.evaluated_students > 0 && (
+            {/* Class Performance & Trends Summary Banner */}
+            {analytics.total_students > 0 && analytics.class_averages && (
+              <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md border border-indigo-900/60 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        Class Averages &amp; Risk Trends
+                      </span>
+                      {analytics.students_worsening_count > 0 && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>{analytics.students_worsening_count} Deteriorating</span>
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-lg font-bold text-white">
+                      Class Performance &amp; Longitudinal Telemetry
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-indigo-200/80 pt-1">
+                      <div>
+                        Mean G1: <strong className="text-white">{analytics.class_averages.avg_g1.toFixed(1)}</strong>/20
+                      </div>
+                      <span className="text-indigo-400">•</span>
+                      <div>
+                        Mean G2: <strong className="text-white">{analytics.class_averages.avg_g2.toFixed(1)}</strong>/20
+                      </div>
+                      <span className="text-indigo-400">•</span>
+                      <div>
+                        Velocity:{" "}
+                        <strong
+                          className={
+                            analytics.class_averages.avg_grade_velocity >= 0
+                              ? "text-emerald-400"
+                              : "text-rose-400"
+                          }
+                        >
+                          {analytics.class_averages.avg_grade_velocity > 0 ? "+" : ""}
+                          {analytics.class_averages.avg_grade_velocity.toFixed(2)} pts
+                        </strong>
+                      </div>
+                      <span className="text-indigo-400">•</span>
+                      <div>
+                        Chronic Absenteeism:{" "}
+                        <strong className="text-white">
+                          {analytics.class_averages.chronic_absenteeism_pct.toFixed(1)}%
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link
+                    href="/dashboard/faculty/analytics"
+                    className="self-start md:self-auto py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-2 flex-shrink-0"
+                  >
+                    <span>View Detailed Analytics &amp; Trends</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              )}
+
+              {/* Risk Distribution Chart */}
+              {analytics.evaluated_students > 0 && (
               <RiskDistributionChart
                 distribution={analytics.risk_distribution}
                 percentages={analytics.risk_percentages}
@@ -386,7 +446,29 @@ export default function FacultyDashboardPage() {
             )}
 
             {/* Operational Navigation Shortcuts */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pt-2">
+              <Link
+                href="/dashboard/faculty/analytics"
+                className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group flex items-start gap-4"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                  <BarChart3 className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      Analytics &amp; Trends
+                    </h3>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                      PRD F9/F11
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Explore class performance averages, temporal risk trends, and deteriorating trajectories.
+                  </p>
+                </div>
+              </Link>
+
               <Link
                 href="/dashboard/faculty/students"
                 className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group flex items-start gap-4"
@@ -419,7 +501,7 @@ export default function FacultyDashboardPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      Direct Student ID Lookup
+                      Student ID Lookup
                     </h3>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
                       Phase 3.5

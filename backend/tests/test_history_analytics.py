@@ -363,7 +363,7 @@ def test_faculty_analytics_faculty_allowed(test_client: TestClient, faculty_user
     assert "at_risk_count" in data
     assert "risk_distribution" in data
     assert "school_distribution" in data
-    assert data["model_version"] == "v1.0.0"
+    assert data["model_version"] in ("v1.0.0", "v1.1.0")
 
 
 def test_faculty_analytics_admin_allowed(test_client: TestClient, admin_user):
@@ -462,3 +462,210 @@ def test_faculty_analytics_privacy_non_identifying(test_client: TestClient, facu
     forbidden_keys = {"student_code", "email", "first_name", "last_name", "user_id", "G1", "G2", "G3"}
     for key in forbidden_keys:
         assert key not in data
+
+
+def test_faculty_analytics_class_averages_math_correctness(
+    test_client: TestClient, admin_user, db_session: Session
+):
+    """Verify class averages are calculated over each student's latest academic record with mathematical precision."""
+    # Create two students
+    s1 = Student(student_code="STU-AVG-01", school="GP")
+    s2 = Student(student_code="STU-AVG-02", school="GP")
+    db_session.add_all([s1, s2])
+    db_session.flush()
+
+    # Student 1: Old record (should be ignored for class average)
+    r1_old = AcademicRecord(
+        student_id=s1.id,
+        recorded_at=datetime.now(timezone.utc) - timedelta(days=30),
+        G1=5.0,
+        G2=5.0,
+        absences=20,
+        failures=3,
+        **{k: v for k, v in SAMPLE_TELEMETRY_1.items() if k not in ["G1", "G2", "absences", "failures", "term"]},
+        term="Old Term",
+    )
+    db_session.add(r1_old)
+    db_session.flush()
+
+    # Student 1: Latest record: G1=10, G2=14 (velocity = +4), absences=12 (chronic), failures=1 (>0)
+    r1_new = AcademicRecord(
+        student_id=s1.id,
+        recorded_at=datetime.now(timezone.utc),
+        G1=10.0,
+        G2=14.0,
+        absences=12,
+        failures=1,
+        **{k: v for k, v in SAMPLE_TELEMETRY_1.items() if k not in ["G1", "G2", "absences", "failures", "term"]},
+        term="Latest Term 1",
+    )
+    # Student 2: Latest record: G1=16, G2=14 (velocity = -2), absences=2 (not chronic), failures=0
+    r2 = AcademicRecord(
+        student_id=s2.id,
+        recorded_at=datetime.now(timezone.utc),
+        G1=16.0,
+        G2=14.0,
+        absences=2,
+        failures=0,
+        **{k: v for k, v in SAMPLE_TELEMETRY_1.items() if k not in ["G1", "G2", "absences", "failures", "term"]},
+        term="Latest Term 2",
+    )
+    db_session.add_all([r1_new, r2])
+    db_session.commit()
+
+    # Expected:
+    # avg G1 = (10 + 16) / 2 = 13.0
+    # avg G2 = (14 + 14) / 2 = 14.0
+    # avg velocity = (4 + (-2)) / 2 = 1.0
+    # avg absences = (12 + 2) / 2 = 7.0
+    # chronic absenteeism pct = 1 / 2 * 100 = 50.0%
+    # failures pct = 1 / 2 * 100 = 50.0%
+
+    res = test_client.get("/api/faculty/analytics", headers=admin_user["headers"])
+    assert res.status_code == 200
+    data = res.json()
+    avg = data["class_averages"]
+
+    assert avg["avg_g1"] == 13.0
+    assert avg["avg_g2"] == 14.0
+    assert avg["avg_grade_velocity"] == 1.0
+    assert avg["avg_absences"] == 7.0
+    assert avg["chronic_absenteeism_pct"] == 50.0
+    assert avg["failures_pct"] == 50.0
+    assert avg["total_students_with_records"] == 2
+
+
+def test_faculty_analytics_risk_trend_time_series_and_worsening(
+    test_client: TestClient, admin_user, db_session: Session
+):
+    """Verify point-in-time risk trend computation and students-worsening detection."""
+    s1 = Student(student_code="STU-TREND-01", school="GP")
+    s2 = Student(student_code="STU-TREND-02", school="GP")
+    db_session.add_all([s1, s2])
+    db_session.flush()
+
+    day1 = datetime(2026, 9, 10, 10, 0, 0, tzinfo=timezone.utc)
+    day2 = datetime(2026, 9, 20, 10, 0, 0, tzinfo=timezone.utc)
+
+    # Day 1: Student 1 has Low risk (0.20)
+    p1_d1 = Prediction(
+        student_id=s1.id,
+        created_at=day1,
+        risk_probability=0.20,
+        risk_level="Low",
+        at_risk_binary=0,
+        model_version="v1.0.0",
+    )
+    # Day 1: Student 2 has High risk (0.80)
+    p2_d1 = Prediction(
+        student_id=s2.id,
+        created_at=day1,
+        risk_probability=0.80,
+        risk_level="High",
+        at_risk_binary=1,
+        model_version="v1.0.0",
+    )
+    # Day 2: Student 1 worsens significantly: risk increases from 0.20 to 0.45 (+0.25 >= 0.15), risk_level="Medium"
+    p1_d2 = Prediction(
+        student_id=s1.id,
+        created_at=day2,
+        risk_probability=0.45,
+        risk_level="Medium",
+        at_risk_binary=0,
+        model_version="v1.0.0",
+    )
+    db_session.add_all([p1_d1, p2_d1, p1_d2])
+    db_session.commit()
+
+    # Query trends with bucket=day
+    res = test_client.get("/api/faculty/analytics/trends?bucket=day", headers=admin_user["headers"])
+    assert res.status_code == 200
+    data = res.json()
+
+    assert data["bucket"] == "day"
+    trends = data["risk_trend"]
+    assert len(trends) == 2
+
+    # Trend Point 1 (2026-09-10): s1 is Low, s2 is High
+    t1 = next(t for t in trends if t["date"] == "2026-09-10")
+    assert t1["low"] == 1
+    assert t1["medium"] == 0
+    assert t1["high"] == 1
+    assert t1["total_evaluated"] == 2
+
+    # Trend Point 2 (2026-09-20): s1 became Medium, s2 is still High (latest as of date)
+    t2 = next(t for t in trends if t["date"] == "2026-09-20")
+    assert t2["low"] == 0
+    assert t2["medium"] == 1
+    assert t2["high"] == 1
+    assert t2["total_evaluated"] == 2
+
+    # Worsening students: s1 worsened by +0.25 (>= 0.15)
+    assert data["students_worsening_count"] == 1
+    assert len(data["students_worsening"]) == 1
+    w = data["students_worsening"][0]
+    assert w["student_id"] == s1.id
+    assert w["student_code"] == "STU-TREND-01"
+    assert w["previous_risk_probability"] == 0.20
+    assert w["latest_risk_probability"] == 0.45
+    assert w["risk_delta"] == 0.25
+    assert w["previous_risk_level"] == "Low"
+    assert w["latest_risk_level"] == "Medium"
+
+
+def test_faculty_analytics_trends_scoping_and_rbac(
+    test_client: TestClient, faculty_user, admin_user, student_with_history, db_session: Session
+):
+    """Verify RBAC and mentor scoping on GET /api/faculty/analytics/trends."""
+    # 1. Unauthenticated -> 401
+    res_unauth = test_client.get("/api/faculty/analytics/trends")
+    assert res_unauth.status_code == 401
+
+    # 2. Student role -> 403 Forbidden
+    res_student = test_client.get(
+        "/api/faculty/analytics/trends", headers=student_with_history["headers"]
+    )
+    assert res_student.status_code == 403
+
+    # 3. Faculty with ZERO assignments -> empty response
+    faculty_user_id = faculty_user["user"].id
+    # Clean any assignments for this faculty
+    db_session.query(MentorAssignment).filter(
+        MentorAssignment.faculty_user_id == faculty_user_id
+    ).delete()
+    db_session.commit()
+
+    res_zero = test_client.get("/api/faculty/analytics/trends", headers=faculty_user["headers"])
+    assert res_zero.status_code == 200
+    zero_data = res_zero.json()
+    assert zero_data["risk_trend"] == []
+    assert zero_data["class_averages"]["total_students_with_records"] == 0
+    assert zero_data["students_worsening_count"] == 0
+
+    # 4. Faculty with assigned student -> sees assigned data
+    assigned_stu = Student(student_code="STU-SCOPE-FA1", school="GP")
+    db_session.add(assigned_stu)
+    db_session.flush()
+    db_session.add(
+        MentorAssignment(faculty_user_id=faculty_user_id, student_id=assigned_stu.id)
+    )
+    db_session.add(
+        AcademicRecord(
+            student_id=assigned_stu.id,
+            G1=14.0,
+            G2=16.0,
+            absences=3,
+            failures=0,
+            **{k: v for k, v in SAMPLE_TELEMETRY_1.items() if k not in ["G1", "G2", "absences", "failures", "term"]},
+            term="Scoped Term",
+        )
+    )
+    db_session.commit()
+
+    res_assigned = test_client.get("/api/faculty/analytics/trends", headers=faculty_user["headers"])
+    assert res_assigned.status_code == 200
+    assigned_data = res_assigned.json()
+    assert assigned_data["class_averages"]["total_students_with_records"] == 1
+    assert assigned_data["class_averages"]["avg_g1"] == 14.0
+    assert assigned_data["class_averages"]["avg_g2"] == 16.0
+

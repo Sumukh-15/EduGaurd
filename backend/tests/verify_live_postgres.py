@@ -349,7 +349,7 @@ def run_live_tests():
     assert pred_data["risk_level"] in ("Low", "Medium", "High")
     assert 0.0 <= pred_data["risk_probability"] <= 1.0
     assert pred_data["at_risk_binary"] in (0, 1)
-    assert pred_data["model_version"] == "v1.0.0"
+    assert pred_data["model_version"] in ("v1.0.0", "v1.1.0")
     assert len(pred_data["top_factors"]) == 5
     assert "causal" in pred_data["causal_disclaimer"].lower()
     live_pred_id = pred_data["prediction_id"]
@@ -363,7 +363,7 @@ def run_live_tests():
         db_prediction = db.query(Prediction).filter(Prediction.id == live_pred_id).first()
         assert db_prediction is not None, f"Prediction {live_pred_id} not found in PostgreSQL"
         assert db_prediction.student_id == s1_id
-        assert db_prediction.model_version == "v1.0.0"
+        assert db_prediction.model_version in ("v1.0.0", "v1.1.0")
 
         db_explanations = db.query(Explanation).filter(Explanation.prediction_id == live_pred_id).all()
         assert len(db_explanations) == 5, f"Expected 5 explanations, found {len(db_explanations)}"
@@ -493,7 +493,7 @@ def run_live_tests():
     assert an_data["evaluated_students"] >= 1
     assert "risk_distribution" in an_data
     assert "school_distribution" in an_data
-    assert an_data["model_version"] == "v1.0.0"
+    assert an_data["model_version"] in ("v1.0.0", "v1.1.0")
 
     # Privacy check: No student-identifying information in aggregate payload
     forbidden_keys = {"student_code", "email", "first_name", "last_name", "user_id"}

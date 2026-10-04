@@ -1,4 +1,4 @@
-"""Unit tests for EduGuard model selection, test evaluation, and model card generation."""
+"""Unit tests for EduGuard model selection, test evaluation, calibration, and model card generation."""
 
 from pathlib import Path
 import json
@@ -16,39 +16,45 @@ def test_select_best_model_priority_logic():
     assert "pooled_oof_metrics" in info
 
     mean_metrics = info["mean_fold_metrics"]
-    assert mean_metrics["recall"] > 0.90
-    assert mean_metrics["f1"] > 0.85
+    assert mean_metrics["recall"] > 0.95
+    assert mean_metrics["roc_auc"] > 0.95
 
     oof = info["pooled_oof_metrics"]
     cm = oof["confusion_matrix"]
     assert cm["tp"] + cm["fn"] + cm["fp"] + cm["tn"] == 316
-    assert cm["tp"] == 99
-    assert cm["fn"] == 5
-    assert cm["fp"] == 22
-    assert cm["tn"] == 190
+    assert cm["tp"] == 103
+    assert cm["fn"] == 1
+    assert cm["fp"] == 53
+    assert cm["tn"] == 159
 
 
 def test_test_evaluation_artifacts_exist():
-    """Verifies that test evaluation produces valid metrics and confusion matrix artifacts."""
+    """Verifies that test evaluation produces valid metrics, confusion matrix, and calibration curve."""
     metrics_path = Path("ml/reports/selected_model_test_metrics.json")
     cm_plot_path = Path("ml/reports/test_confusion_matrix.png")
+    cal_plot_path = Path("ml/reports/calibration.png")
 
     assert metrics_path.exists(), "selected_model_test_metrics.json missing"
     assert cm_plot_path.exists(), "test_confusion_matrix.png missing"
+    assert cal_plot_path.exists(), "calibration.png missing"
     assert cm_plot_path.stat().st_size > 1000
+    assert cal_plot_path.stat().st_size > 1000
 
     with open(metrics_path, "r", encoding="utf-8") as f:
         metrics = json.load(f)
 
     assert metrics["model"] == "Logistic Regression"
+    assert metrics["model_version"] == "v1.1.0"
     assert metrics["test_samples"] == 79
     assert metrics["at_risk_samples"] == 26
     assert metrics["not_at_risk_samples"] == 53
+    assert "brier_score" in metrics
+    assert 0.0 <= metrics["brier_score"] <= 0.25
 
     # Check metrics validity
-    assert 0.80 <= metrics["recall"] <= 1.0
-    assert 0.70 <= metrics["precision"] <= 1.0
-    assert 0.80 <= metrics["f1"] <= 1.0
+    assert 0.90 <= metrics["recall"] <= 1.0
+    assert 0.60 <= metrics["precision"] <= 1.0
+    assert 0.75 <= metrics["f1"] <= 1.0
     assert 0.90 <= metrics["roc_auc"] <= 1.0
     assert 0.80 <= metrics["accuracy"] <= 1.0
 
@@ -57,16 +63,21 @@ def test_test_evaluation_artifacts_exist():
 
 
 def test_model_card_completeness_and_ethics():
-    """Verifies that MODEL_CARD.md contains all required ethical guardrails and limitations."""
+    """Verifies that MODEL_CARD.md contains all required ethical guardrails, calibration, and tuning analysis."""
     card_path = Path("ml/reports/MODEL_CARD.md")
     assert card_path.exists(), "MODEL_CARD.md missing"
 
     content = card_path.read_text(encoding="utf-8")
 
-    # Architecture and Metrics
+    # Architecture, Version, and Tuning
     assert "Logistic Regression" in content
+    assert "v1.1.0" in content
+    assert "Tuned vs. Untuned" in content
     assert "Held-Out Test Set Performance" in content
     assert "Confusion Matrix" in content
+    assert "Calibration" in content
+    assert "Configurable Risk Thresholds" in content
+    assert "KernelExplainer" in content
 
     # Non-Goals & Prohibitions
     assert "NO Autonomous Grading" in content

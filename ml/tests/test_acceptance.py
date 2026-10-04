@@ -1,10 +1,11 @@
-"""End-to-end acceptance audit suite for EduGuard Phase 1 ML pipeline.
+"""End-to-end acceptance audit suite for EduGuard Phase 1 ML pipeline (v1.1.0).
 
 Verifies:
-1. Strict alignment between serialized model_v1.joblib, model_metadata.json, and EduGuardExplainer.
+1. Strict alignment between serialized model_v1_1.joblib, model_metadata.json, and EduGuardExplainer.
 2. Zero leakage: G3 is prohibited across all endpoints and schemas.
 3. Held-out test set isolation and reproducibility of metrics in MODEL_CARD.md.
 4. Risk threshold and category boundary consistency.
+5. Legacy model_v1.joblib preservation for backward traceability.
 """
 
 from pathlib import Path
@@ -25,7 +26,7 @@ from ml.features import get_feature_names_from_pipeline
 
 def test_pipeline_and_metadata_alignment():
     """Verifies transformed features match between pipeline and metadata."""
-    pipe = load_model_pipeline("ml/artifacts/model_v1.joblib")
+    pipe = load_model_pipeline("ml/artifacts/model_v1_1.joblib")
     meta = load_model_metadata("ml/artifacts/model_metadata.json")
 
     pipe_features = get_feature_names_from_pipeline(pipe.named_steps["features"])
@@ -33,14 +34,23 @@ def test_pipeline_and_metadata_alignment():
 
     assert pipe_features == meta_features
     assert len(pipe_features) == 62
+    assert meta["model_version"] == "v1.1.0"
     assert meta["schema"]["raw_feature_count"] == 32
     assert "G3" not in meta["schema"]["raw_input_features"]
     assert "G3" in meta["schema"]["excluded_features"]
 
 
+def test_legacy_model_traceability():
+    """Verifies that model_v1.joblib is preserved on disk for backward traceability."""
+    v1_path = Path("ml/artifacts/model_v1.joblib")
+    assert v1_path.exists(), "Legacy model_v1.joblib must be retained"
+    legacy_pipe = load_model_pipeline(v1_path)
+    assert legacy_pipe is not None
+
+
 def test_explainer_and_predictor_alignment():
     """Verifies that EduGuardExplainer and predict_student produce identical probabilities."""
-    pipe = load_model_pipeline("ml/artifacts/model_v1.joblib")
+    pipe = load_model_pipeline("ml/artifacts/model_v1_1.joblib")
     test_df = pd.read_csv("data/processed/test_split.csv")
     sample_student = test_df.iloc[0].drop("at_risk").to_dict()
 

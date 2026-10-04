@@ -102,3 +102,29 @@ def test_global_summary_artifacts_generated(explainer):
     assert csv_path.exists()
     assert plot_path.exists()
     assert plot_path.stat().st_size > 1000
+
+
+def test_explainer_polymorphism(sample_student_dict):
+    """Verifies that EduGuardExplainer supports both LinearExplainer and TreeExplainer architectures."""
+    from ml.train import build_candidate_pipelines
+
+    train_df = pd.read_csv("data/processed/train_split.csv")
+    X_train = train_df.drop(columns=["at_risk"])
+    y_train = train_df["at_risk"]
+
+    # 1. Linear (Logistic Regression)
+    lr_pipe = build_candidate_pipelines()["Logistic Regression"]
+    lr_pipe.fit(X_train, y_train)
+    lr_explainer = EduGuardExplainer(trained_pipeline=lr_pipe, background_data=X_train)
+    assert lr_explainer.explainer_type == "linear"
+    lr_res = lr_explainer.explain_instance(sample_student_dict)
+    assert len(lr_res["top_factors"]) == 5
+
+    # 2. Tree (Random Forest)
+    rf_pipe = build_candidate_pipelines()["Random Forest"]
+    rf_pipe.fit(X_train, y_train)
+    rf_explainer = EduGuardExplainer(trained_pipeline=rf_pipe, background_data=X_train)
+    assert rf_explainer.explainer_type == "tree"
+    rf_res = rf_explainer.explain_instance(sample_student_dict)
+    assert len(rf_res["top_factors"]) == 5
+

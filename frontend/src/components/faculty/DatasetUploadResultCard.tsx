@@ -5,10 +5,12 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
+  Brain,
   CheckCircle,
   FileCheck,
   RotateCcw,
   Shield,
+  Sparkles,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -23,6 +25,8 @@ export default function DatasetUploadResultCard({
   result,
   onReset,
 }: DatasetUploadResultCardProps) {
+  const hasPredictions = typeof result.predictions_created === "number" && result.predictions_created > 0;
+
   return (
     <section
       aria-labelledby="upload-success-heading"
@@ -58,7 +62,7 @@ export default function DatasetUploadResultCard({
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 ${hasPredictions ? "sm:grid-cols-4" : "sm:grid-cols-3"} gap-4`}>
         {/* Total Validated Rows */}
         <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between mb-1 text-slate-400">
@@ -94,6 +98,20 @@ export default function DatasetUploadResultCard({
           </p>
           <span className="text-[10px] text-indigo-700/80 dark:text-indigo-400">New student identities</span>
         </div>
+
+        {/* Predictions Created (if generated) */}
+        {hasPredictions && (
+          <div className="p-4 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/60">
+            <div className="flex items-center justify-between mb-1 text-purple-700 dark:text-purple-400">
+              <span className="text-[11px] font-bold uppercase tracking-wider">Predictions Created</span>
+              <Brain className="w-4 h-4 text-purple-600" />
+            </div>
+            <p className="text-2xl font-extrabold text-purple-900 dark:text-purple-200">
+              {result.predictions_created}
+            </p>
+            <span className="text-[10px] text-purple-700/80 dark:text-purple-400">Inference + SHAP rows</span>
+          </div>
+        )}
       </div>
 
       {/* Backend Confirmation Message */}
@@ -103,22 +121,96 @@ export default function DatasetUploadResultCard({
         </p>
       </div>
 
-      {/* Mandatory Invariant Callout: NO PREDICTION GENERATION */}
-      <div
-        role="note"
-        aria-label="No predictions generated disclaimer"
-        className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 leading-relaxed"
-      >
-        <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <strong className="block font-semibold mb-0.5">
-            Architecture Notice: Telemetry Ingestion Complete — No Predictions Generated
-          </strong>
-          <span>
-            The CSV ingestion pipeline records and verifies student academic telemetry in PostgreSQL. It does not automatically run inference or generate predictions for the uploaded cohort. Machine learning risk assessments and SHAP explanations are computed on-demand via the Direct Student Review workflow.
-          </span>
+      {/* Risk Summary Cards (if predictions generated) */}
+      {hasPredictions && result.risk_summary && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/20 to-purple-50/20 dark:from-slate-850 dark:via-indigo-950/20 dark:to-purple-950/20 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Class Risk Distribution Breakdown</span>
+            </h3>
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {result.predictions_created} total evaluated
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Low Risk */}
+            <div className="p-4 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/90 dark:border-emerald-900/60 text-center shadow-sm">
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                Low Risk
+              </span>
+              <p className="text-2xl font-extrabold text-emerald-900 dark:text-emerald-200 mt-1">
+                {result.risk_summary.low ?? 0}
+              </p>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400/90 font-mono">
+                p &lt; 0.40
+              </span>
+            </div>
+
+            {/* Medium Risk */}
+            <div className="p-4 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-900/60 text-center shadow-sm">
+              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
+                Medium Risk
+              </span>
+              <p className="text-2xl font-extrabold text-amber-900 dark:text-amber-200 mt-1">
+                {result.risk_summary.medium ?? 0}
+              </p>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400/90 font-mono">
+                0.40 ≤ p &lt; 0.70
+              </span>
+            </div>
+
+            {/* High Risk */}
+            <div className="p-4 rounded-xl bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/90 dark:border-rose-900/60 text-center shadow-sm">
+              <span className="text-[11px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">
+                High Risk
+              </span>
+              <p className="text-2xl font-extrabold text-rose-900 dark:text-rose-200 mt-1">
+                {result.risk_summary.high ?? 0}
+              </p>
+              <span className="text-[10px] text-rose-600 dark:text-rose-400/90 font-mono">
+                p ≥ 0.70
+              </span>
+            </div>
+          </div>
+
+          {/* Primary Action Button: View updated class risk distribution */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200/60 dark:border-slate-800">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Predictions and SHAP factor attributions are now live on your faculty dashboard.
+            </span>
+            <Link
+              href="/dashboard/faculty"
+              id="view-updated-class-risk-distribution-btn"
+              className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 flex-shrink-0"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span>View updated class risk distribution</span>
+              <ArrowRight className="w-4 h-4 ml-0.5" />
+            </Link>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Mandatory Invariant Callout when NO predictions generated */}
+      {!hasPredictions && (
+        <div
+          role="note"
+          aria-label="No predictions generated disclaimer"
+          className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3 leading-relaxed"
+        >
+          <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <strong className="block font-semibold mb-0.5">
+              Architecture Notice: Telemetry Ingestion Complete — No Predictions Generated
+            </strong>
+            <span>
+              The CSV ingestion pipeline recorded student academic telemetry in PostgreSQL without automatic inference. Machine learning risk assessments and SHAP explanations can be evaluated on-demand via the Direct Student Review workflow or by enabling the prediction checkbox on upload.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Post-Upload Navigation Shortcuts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">

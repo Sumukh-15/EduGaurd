@@ -1,10 +1,9 @@
-"""Dataset batch upload and ingestion endpoints."""
-
 import csv
 import io
+import logging
 import os
-from typing import Any, Dict, List, Set
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from typing import Any, Dict, List, Optional, Set
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -12,10 +11,15 @@ from backend.app.api.deps import require_roles
 from backend.app.db.session import get_db
 from backend.app.models.academic_record import AcademicRecord
 from backend.app.models.assignment import MentorAssignment
+from backend.app.models.explanation import Explanation
+from backend.app.models.prediction import Prediction
 from backend.app.models.student import Student
 from backend.app.models.user import User
 from backend.app.schemas.academic_data import AcademicRecordCreate
 from backend.app.schemas.dataset import DatasetUploadResponse
+from backend.app.services.ml_service import ml_service
+
+logger = logging.getLogger("eduguard.dataset")
 
 router = APIRouter(prefix="/dataset", tags=["Dataset"])
 
@@ -56,6 +60,10 @@ ALLOWED_COLUMNS: Set[str] = PERMISSIBLE_FEATURES | OPTIONAL_METADATA_COLUMNS
 )
 async def upload_dataset(
     file: UploadFile = File(...),
+    run_predictions: bool = Query(
+        False,
+        description="Optional flag to run risk predictions and SHAP explanations for newly ingested records",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("faculty", "admin")),
 ) -> DatasetUploadResponse:
@@ -283,8 +291,11 @@ async def upload_dataset(
     # 8. Atomic Database Persistence
     records_created = 0
     students_created = 0
+    predictions_created = 0
+    risk_summary: Optional[Dict[str, int]] = None
 
     try:
+        new_record_entries: List[tuple] = []
         for item in validated_rows:
             code = item["student_code"]
             if code:
@@ -344,20 +355,71 @@ async def upload_dataset(
             )
             db.add(new_record)
             records_created += 1
+            new_record_entries.append((student, new_record))
+
+        db.flush()
+
+        # If opt-in predictions requested, evaluate inference and SHAP for every newly created academic record
+        if run_predictions and new_record_entries:
+            feature_dicts = [rec.to_ml_feature_dict() for _, rec in new_record_entries]
+            ml_results = ml_service.predict_batch(feature_dicts, top_k=5)
+
+            risk_counts = {"low": 0, "medium": 0, "high": 0}
+            for (stud, rec), ml_res in zip(new_record_entries, ml_results):
+                new_prediction = Prediction(
+                    student_id=stud.id,
+                    academic_record_id=rec.id,
+                    risk_probability=ml_res["risk_probability"],
+                    risk_level=ml_res["risk_level"],
+                    at_risk_binary=ml_res["at_risk_binary"],
+                    model_version=ml_res["model_version"],
+                )
+                db.add(new_prediction)
+                db.flush()
+
+                for factor in ml_res["top_factors"]:
+                    raw_val_str = str(factor["raw_value"]) if factor.get("raw_value") is not None else None
+                    explanation = Explanation(
+                        prediction_id=new_prediction.id,
+                        feature_name=factor["feature"],
+                        display_name=factor["display_name"],
+                        contribution=factor["contribution"],
+                        direction=factor["direction"],
+                        raw_value=raw_val_str,
+                    )
+                    db.add(explanation)
+
+                lvl_key = ml_res["risk_level"].lower()
+                if lvl_key in risk_counts:
+                    risk_counts[lvl_key] += 1
+                predictions_created += 1
+
+            risk_summary = risk_counts
 
         db.commit()
     except Exception as db_err:
         db.rollback()
+        logger.error("Failed to persist uploaded dataset: %s", db_err, exc_info=True)
+        if isinstance(db_err, HTTPException):
+            raise db_err
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to persist uploaded dataset due to a database transaction error.",
+            detail=f"Failed to persist uploaded dataset due to a database transaction error: {str(db_err)}",
         )
+
+    msg = (
+        f"Successfully ingested {records_created} academic records across {records_created} rows ({students_created} new student profiles created) and generated {predictions_created} risk predictions."
+        if run_predictions
+        else f"Successfully ingested {records_created} academic records across {records_created} rows ({students_created} new student profiles created)."
+    )
 
     return DatasetUploadResponse(
         filename=safe_filename,
         total_rows=len(validated_rows),
         records_created=records_created,
         students_created=students_created,
-        message=f"Successfully ingested {records_created} academic records across {records_created} rows ({students_created} new student profiles created).",
+        predictions_created=predictions_created,
+        risk_summary=risk_summary,
+        message=msg,
         status="success",
     )

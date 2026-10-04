@@ -1,8 +1,10 @@
 """SHAP explainability wrapper for the EduGuard student risk classifier.
 
 Provides:
-1. Exact Shapley value attribution using shap.LinearExplainer for the trained
-   Logistic Regression pipeline.
+1. Model-agnostic Shapley value attribution supporting:
+   - Linear models (shap.LinearExplainer for Logistic Regression or Linear SVM)
+   - Tree models (shap.TreeExplainer for Random Forest and XGBoost)
+   - Kernel models (shap.KernelExplainer as last resort with documented speed cost)
 2. Local explanations: explain_instance(student: dict | pd.DataFrame) returning
    top contributing risk-increasing and protective factors with human-readable labels.
 3. Global feature importance: explain_global_summary() based on mean absolute SHAP values.
@@ -17,6 +19,10 @@ import json
 import numpy as np
 import pandas as pd
 import shap
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -108,7 +114,6 @@ def get_display_name(feature_key: str) -> str:
     """Returns human-friendly label for internal feature matrix column."""
     if feature_key in FEATURE_DISPLAY_NAMES:
         return FEATURE_DISPLAY_NAMES[feature_key]
-    # Clean up standard one-hot names, e.g. "Mjob_health" -> "Mother's Job: health"
     if "_" in feature_key:
         prefix, suffix = feature_key.split("_", 1)
         return f"{prefix.capitalize()}: {suffix}"
@@ -131,12 +136,16 @@ class EduGuardExplainer:
                 raise FileNotFoundError(f"Training data file missing at: {train_path.resolve()}")
             train_df = pd.read_csv(train_path)
             X_train = train_df.drop(columns=["at_risk"])
-            y_train = train_df["at_risk"]
-
-            # Initialize and fit winning Logistic Regression pipeline
-            trained_pipeline = build_candidate_pipelines()["Logistic Regression"]
-            trained_pipeline.fit(X_train, y_train)
             background_data = X_train
+
+            # Try to load existing serialized pipeline, fallback to fitting Logistic Regression
+            try:
+                from ml.serialize import load_model_pipeline
+                trained_pipeline = load_model_pipeline()
+            except Exception:
+                y_train = train_df["at_risk"]
+                trained_pipeline = build_candidate_pipelines()["Logistic Regression"]
+                trained_pipeline.fit(X_train, y_train)
 
         self.pipeline = trained_pipeline
         self.feature_pipeline = self.pipeline.named_steps["features"]
@@ -146,13 +155,60 @@ class EduGuardExplainer:
         self.feature_names = get_feature_names_from_pipeline(self.feature_pipeline)
         self.X_background_trans = self.feature_pipeline.transform(background_data)
 
-        # shap.LinearExplainer provides exact, analytic Shapley values for linear models
-        self.explainer = shap.LinearExplainer(
-            self.classifier,
-            self.X_background_trans,
-            feature_names=self.feature_names
-        )
-        self.expected_value = float(self.explainer.expected_value)
+        # Initialize appropriate explainer based on model architecture
+        if isinstance(self.classifier, (RandomForestClassifier, XGBClassifier)):
+            # TreeExplainer for tree ensembles (fast: ~0.001s/sample)
+            self.explainer_type = "tree"
+            self.explainer = shap.TreeExplainer(self.classifier)
+            exp_val = self.explainer.expected_value
+            if isinstance(exp_val, (list, np.ndarray)):
+                self.expected_value = float(exp_val[1]) if len(exp_val) > 1 else float(exp_val[0])
+            else:
+                self.expected_value = float(exp_val)
+        elif isinstance(self.classifier, LogisticRegression) or (
+            isinstance(self.classifier, SVC) and getattr(self.classifier, "kernel", "") == "linear"
+        ):
+            # LinearExplainer for linear classifiers (exact, analytic, ultra-fast: ~0.0002s/sample)
+            self.explainer_type = "linear"
+            self.explainer = shap.LinearExplainer(
+                self.classifier,
+                self.X_background_trans,
+                feature_names=self.feature_names
+            )
+            self.expected_value = float(self.explainer.expected_value)
+        else:
+            # KernelExplainer as a last resort for non-linear kernel SVM (~1.5-2.5s/sample)
+            self.explainer_type = "kernel"
+            # Subsample background to 20 samples to keep evaluation tractable
+            bg_sample = shap.sample(self.X_background_trans, 20, random_state=RANDOM_STATE)
+            self.explainer = shap.KernelExplainer(
+                lambda x: self.classifier.predict_proba(x)[:, 1],
+                bg_sample
+            )
+            exp_val = self.explainer.expected_value
+            if isinstance(exp_val, (list, np.ndarray)):
+                self.expected_value = float(exp_val[1]) if len(exp_val) > 1 else float(exp_val[0])
+            else:
+                self.expected_value = float(exp_val)
+
+    def compute_shap_matrix(self, X_trans: np.ndarray) -> np.ndarray:
+        """Computes 2D SHAP value matrix of shape (N, num_features) consistently across explainers."""
+        if self.explainer_type == "tree":
+            res = self.explainer(X_trans)
+            vals = res.values
+            # Binary RandomForest yields (N, num_features, 2); class 1 is index 1
+            if len(vals.shape) == 3:
+                return vals[:, :, 1]
+            return vals
+        elif self.explainer_type == "linear":
+            res = self.explainer(X_trans)
+            return res.values
+        else:
+            # KernelExplainer
+            vals = self.explainer.shap_values(X_trans, nsamples=50)
+            if isinstance(vals, list):
+                return np.array(vals[1]) if len(vals) > 1 else np.array(vals[0])
+            return np.array(vals)
 
     def explain_instance(
         self,
@@ -184,19 +240,17 @@ class EduGuardExplainer:
 
         # 2. Get model prediction and probability
         prob_at_risk = float(self.pipeline.predict_proba(df)[0, 1])
-        if prob_at_risk >= 0.70:
-            risk_level = "High"
-        elif prob_at_risk >= 0.40:
-            risk_level = "Medium"
-        else:
-            risk_level = "Low"
+
+        # Risk categorization using centralized thresholds
+        from ml.serialize import classify_risk_level
+        risk_level = classify_risk_level(prob_at_risk)
 
         # 3. Transform features through identical pipeline
         X_trans = self.feature_pipeline.transform(df)
 
-        # 4. Compute exact Shapley values (on log-odds scale for Class 1)
-        shap_res = self.explainer(X_trans)
-        shap_values = shap_res.values[0]  # Array of length len(self.feature_names)
+        # 4. Compute Shapley values
+        shap_values_matrix = self.compute_shap_matrix(X_trans)
+        shap_values = shap_values_matrix[0]
 
         # 5. Extract and rank individual factor contributions
         df_engineered = self.feature_pipeline.named_steps["engineer"].transform(df)
@@ -218,17 +272,18 @@ class EduGuardExplainer:
                     raw_val = df[base_col].iloc[0]
 
             direction = "increases_risk" if val > 0 else "decreases_risk"
+            disp_name = get_display_name(col_name)
             factors.append({
                 "feature": col_name,
-                "display_name": get_display_name(col_name),
+                "display_name": disp_name,
                 "contribution": round(val, 4),
                 "abs_contribution": abs(val),
                 "direction": direction,
                 "raw_value": raw_val,
                 "interpretation": (
-                    f"{get_display_name(col_name)} shifted risk upward (+{val:.2f})"
+                    f"{disp_name} shifted risk upward (+{val:.2f})"
                     if val > 0 else
-                    f"{get_display_name(col_name)} shifted risk downward ({val:.2f})"
+                    f"{disp_name} shifted risk downward ({val:.2f})"
                 )
             })
 
@@ -254,7 +309,13 @@ class EduGuardExplainer:
         out_path = Path(output_dir)
         out_path.mkdir(parents=True, exist_ok=True)
 
-        shap_matrix = self.explainer(self.X_background_trans).values
+        # For fast execution, use full background for linear/tree or subset for kernel
+        if self.explainer_type == "kernel":
+            X_eval = self.X_background_trans[:30]
+        else:
+            X_eval = self.X_background_trans
+
+        shap_matrix = self.compute_shap_matrix(X_eval)
         mean_abs_shap = np.mean(np.abs(shap_matrix), axis=0)
 
         df_global = pd.DataFrame({
@@ -293,6 +354,7 @@ if __name__ == "__main__":
     print("\nSample Student Explanation Result:")
     print(f"  Predicted Risk Level: {explanation['predicted_risk_level']}")
     print(f"  Risk Probability:     {explanation['risk_probability']*100:.2f}%")
+    print(f"  Explainer Type:       {explainer.explainer_type}")
     print("\nTop Contributing Factors:")
     for f in explanation["top_factors"]:
         print(f"  - {f['display_name']} (raw: {f['raw_value']}): {f['contribution']:+.4f} ({f['direction']})")

@@ -66,3 +66,57 @@ class PredictResponse(BaseModel):
     causal_disclaimer: str = Field(..., description="Ethical non-causal interpretation disclaimer")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BatchPredictRequest(BaseModel):
+    """Payload to trigger batch risk predictions for up to 500 students.
+
+    STRICT ANTI-LEAKAGE:
+    Extra attributes, particularly target label G3, are strictly rejected with 422.
+    """
+
+    student_ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="List of student IDs to evaluate (max 500 per call)",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_g3_leakage(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "G3" in data:
+                raise ValueError("Target label 'G3' is strictly forbidden.")
+        return data
+
+
+class BatchPredictItem(BaseModel):
+    """Per-student evaluation outcome within a batch prediction request."""
+
+    student_id: int = Field(..., description="Target student ID")
+    success: bool = Field(..., description="Whether inference and persistence succeeded")
+    prediction: Optional[PredictResponse] = Field(
+        None,
+        description="Prediction result details if evaluation succeeded",
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Reason for failure if evaluation was unsuccessful",
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BatchPredictResponse(BaseModel):
+    """Aggregated batch prediction response."""
+
+    total: int = Field(..., description="Total student IDs submitted")
+    successful: int = Field(..., description="Number of successful evaluations")
+    failed: int = Field(..., description="Number of failed evaluations")
+    results: List[BatchPredictItem] = Field(..., description="Per-student outcome list")
+
+    model_config = ConfigDict(from_attributes=True)
+

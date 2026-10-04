@@ -55,6 +55,7 @@ export default function FacultyDatasetUploadPage() {
   const [csvPreview, setCsvPreview] = useState<CsvPreviewData | null>(null);
 
   // Upload execution state
+  const [runPredictions, setRunPredictions] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
@@ -196,7 +197,7 @@ export default function FacultyDatasetUploadPage() {
       setClientError(null);
 
       // Submit original file via multipart/form-data to POST /api/dataset/upload
-      const result = await uploadDatasetCsv(selectedFile);
+      const result = await uploadDatasetCsv(selectedFile, runPredictions);
       setUploadResult(result);
     } catch (err: unknown) {
       setUploadError(extractErrorMessage(err));
@@ -235,19 +236,33 @@ export default function FacultyDatasetUploadPage() {
           </div>
         </div>
 
-        {/* Mandatory Architectural Notice: NO PREDICTION GENERATION */}
+        {/* Scope Notice Banner */}
         <div
           role="note"
           aria-label="Upload scope and prediction boundary"
-          className="p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-3 leading-relaxed"
+          className={`p-4 rounded-xl border text-xs flex items-start gap-3 leading-relaxed transition-all ${
+            runPredictions
+              ? "bg-purple-50/80 dark:bg-purple-950/40 border-purple-200/80 dark:border-purple-900/60 text-purple-900 dark:text-purple-200"
+              : "bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-200/80 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200"
+          }`}
         >
-          <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+          <Shield
+            className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+              runPredictions
+                ? "text-purple-600 dark:text-purple-400"
+                : "text-indigo-600 dark:text-indigo-400"
+            }`}
+          />
           <div>
             <strong className="block font-semibold mb-0.5">
-              Important Scope Notice: Ingestion Only
+              {runPredictions
+                ? "Opt-In Active: Batch Risk Inference & SHAP Enabled"
+                : "Scope Notice: Ingestion Only (Predictions Optional)"}
             </strong>
             <span>
-              Uploading a dataset ingests student and academic telemetry records into the database. <strong>It does not automatically generate risk predictions.</strong> Machine learning evaluations remain a separate, on-demand workflow performed via Direct Student Review.
+              {runPredictions
+                ? "Risk predictions and SHAP factor explanations will be generated and persisted for all newly ingested records in the same atomic database transaction."
+                : "Uploading a dataset ingests student and academic telemetry records into the database. You can check 'Run risk predictions after upload' below to automatically evaluate risk and generate SHAP explanations during ingestion."}
             </span>
           </div>
         </div>
@@ -415,8 +430,8 @@ export default function FacultyDatasetUploadPage() {
 
                     <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                       <span className="text-[11px] font-semibold text-slate-400 block">Inference Action</span>
-                      <p className="font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
-                        Ingestion Only (No ML)
+                      <p className={`font-bold mt-0.5 ${runPredictions ? "text-purple-600 dark:text-purple-400" : "text-indigo-600 dark:text-indigo-400"}`}>
+                        {runPredictions ? "Ingest + Run Predictions (SHAP)" : "Ingestion Only (No ML)"}
                       </p>
                     </div>
                   </div>
@@ -488,6 +503,27 @@ export default function FacultyDatasetUploadPage() {
                 </div>
               )}
 
+              {/* Opt-in Prediction Evaluation Checkbox */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="run-predictions-checkbox"
+                  name="runPredictions"
+                  checked={runPredictions}
+                  onChange={(e) => setRunPredictions(e.target.checked)}
+                  disabled={isUploading}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 cursor-pointer"
+                />
+                <label htmlFor="run-predictions-checkbox" className="text-xs cursor-pointer select-none space-y-0.5">
+                  <span className="font-bold text-slate-900 dark:text-white block">
+                    Run risk predictions after upload
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400 block text-[11px] leading-relaxed">
+                    Automatically executes the machine learning model and computes SHAP factor attributions for all uploaded records in the same atomic database transaction.
+                  </span>
+                </label>
+              </div>
+
               {/* Upload Submit Action */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <span className="text-[11px] text-slate-400">
@@ -499,17 +535,21 @@ export default function FacultyDatasetUploadPage() {
                 <button
                   type="submit"
                   disabled={!selectedFile || isUploading || !!clientError}
-                  className="w-full sm:w-auto py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                  className={`w-full sm:w-auto py-2.5 px-6 rounded-xl text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 ${
+                    runPredictions
+                      ? "bg-purple-600 hover:bg-purple-700 active:bg-purple-800 focus-visible:ring-purple-500"
+                      : "bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 focus-visible:ring-indigo-500"
+                  }`}
                 >
                   {isUploading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Uploading &amp; Ingesting Dataset...</span>
+                      <span>{runPredictions ? "Uploading & Predicting..." : "Uploading & Ingesting Dataset..."}</span>
                     </>
                   ) : (
                     <>
                       <UploadCloud className="w-4 h-4" />
-                      <span>Upload &amp; Ingest Telemetry</span>
+                      <span>{runPredictions ? "Upload & Run Risk Predictions" : "Upload & Ingest Telemetry"}</span>
                     </>
                   )}
                 </button>

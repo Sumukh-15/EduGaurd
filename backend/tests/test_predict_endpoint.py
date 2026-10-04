@@ -1,5 +1,6 @@
 """Unit and integration tests for the prediction endpoint (POST /api/predict)."""
 
+import time
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -208,7 +209,7 @@ def test_predict_successful_student_own_record(test_client: TestClient, student_
     assert data["risk_level"] in ("Low", "Medium", "High")
     assert 0.0 <= data["risk_probability"] <= 1.0
     assert data["at_risk_binary"] in (0, 1)
-    assert data["model_version"] == "v1.0.0"
+    assert data["model_version"] in ("v1.0.0", "v1.1.0")
     assert "prediction_id" in data
     assert "created_at" in data
     assert "base_log_odds" in data
@@ -253,7 +254,7 @@ def test_predict_persists_in_database(test_client: TestClient, db_session: Sessi
     assert db_pred is not None
     assert db_pred.student_id == student_id
     assert db_pred.academic_record_id == student_with_record["record"].id
-    assert db_pred.model_version == "v1.0.0"
+    assert db_pred.model_version in ("v1.0.0", "v1.1.0")
 
     # Verify linked Explanations in DB
     db_exps = db_session.query(Explanation).filter(Explanation.prediction_id == pred_id).all()
@@ -466,3 +467,252 @@ def test_predict_unavailable_model_returns_503(test_client: TestClient, student_
     resp = test_client.post("/api/predict", json={"student_id": student_id}, headers=headers)
     assert resp.status_code == 503
     assert "ML model artifacts are not loaded" in resp.json()["detail"]
+
+
+# =========================================================================
+# 5. Batch Prediction Endpoint Tests (POST /api/predict/batch)
+# =========================================================================
+
+def test_batch_predict_unauthenticated_rejected(test_client: TestClient):
+    """Unauthenticated calls to /api/predict/batch must return 401."""
+    resp = test_client.post("/api/predict/batch", json={"student_ids": [1, 2]})
+    assert resp.status_code == 401
+
+
+def test_batch_predict_student_forbidden(test_client: TestClient, student_with_record):
+    """Student users are strictly forbidden from batch predictions (403)."""
+    headers = student_with_record["headers"]
+    resp = test_client.post(
+        "/api/predict/batch",
+        json={"student_ids": [student_with_record["student"].id]},
+        headers=headers,
+    )
+    assert resp.status_code == 403
+
+
+def test_batch_predict_max_limit_exceeded(test_client: TestClient, faculty_user):
+    """Submitting more than 500 student IDs must be rejected with 422."""
+    headers = faculty_user["headers"]
+    large_list = list(range(1, 502))  # 501 IDs
+    resp = test_client.post(
+        "/api/predict/batch",
+        json={"student_ids": large_list},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_batch_predict_empty_list_rejected(test_client: TestClient, faculty_user):
+    """Submitting an empty student_ids list must be rejected with 422."""
+    headers = faculty_user["headers"]
+    resp = test_client.post(
+        "/api/predict/batch",
+        json={"student_ids": []},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_batch_predict_g3_leakage_rejected(test_client: TestClient, faculty_user):
+    """Target label G3 in request body is strictly rejected with 422."""
+    headers = faculty_user["headers"]
+    resp = test_client.post(
+        "/api/predict/batch",
+        json={"student_ids": [1], "G3": 15},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_batch_predict_mentor_scoping_and_per_student_outcomes(
+    test_client: TestClient,
+    faculty_user,
+    admin_user,
+    db_session: Session,
+):
+    """Faculty members can only evaluate students assigned to them; others return per-student error.
+    Admin has universal evaluation access.
+    """
+    faculty = faculty_user["user"]
+    faculty_headers = faculty_user["headers"]
+    admin_headers = admin_user["headers"]
+
+    # Student A: explicitly assigned to faculty
+    student_a = Student(student_code="STU-SCOPE-A", school="GP", cohort_year=2026)
+    db_session.add(student_a)
+    db_session.flush()
+    rec_a = AcademicRecord(student_id=student_a.id, **SAMPLE_ACADEMIC_PAYLOAD)
+    db_session.add(rec_a)
+    assignment_a = MentorAssignment(faculty_user_id=faculty.id, student_id=student_a.id)
+    db_session.add(assignment_a)
+
+    # Student B: NOT assigned to faculty
+    student_b = Student(student_code="STU-SCOPE-B", school="GP", cohort_year=2026)
+    db_session.add(student_b)
+    db_session.flush()
+    rec_b = AcademicRecord(student_id=student_b.id, **SAMPLE_ACADEMIC_PAYLOAD)
+    db_session.add(rec_b)
+
+    # Student C: assigned to faculty but has NO academic telemetry
+    student_c = Student(student_code="STU-SCOPE-C", school="GP", cohort_year=2026)
+    db_session.add(student_c)
+    db_session.flush()
+    assignment_c = MentorAssignment(faculty_user_id=faculty.id, student_id=student_c.id)
+    db_session.add(assignment_c)
+
+    db_session.commit()
+
+    # 1. Faculty calls batch predict for [A, B, C, non_existent_99999]
+    payload = {"student_ids": [student_a.id, student_b.id, student_c.id, 99999]}
+    resp = test_client.post("/api/predict/batch", json=payload, headers=faculty_headers)
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert data["total"] == 4
+    assert data["successful"] == 1
+    assert data["failed"] == 3
+
+    results = {r["student_id"]: r for r in data["results"]}
+
+    # Student A: success
+    assert results[student_a.id]["success"] is True
+    assert results[student_a.id]["prediction"] is not None
+    assert results[student_a.id]["prediction"]["risk_level"] in ("Low", "Medium", "High")
+    assert results[student_a.id]["error"] is None
+
+    # Student B: access denied (not assigned)
+    assert results[student_b.id]["success"] is False
+    assert "mentorship roster" in results[student_b.id]["error"]
+    assert results[student_b.id]["prediction"] is None
+
+    # Student C: no telemetry
+    assert results[student_c.id]["success"] is False
+    assert "No academic telemetry records" in results[student_c.id]["error"]
+    assert results[student_c.id]["prediction"] is None
+
+    # Non-existent student: not found
+    assert results[99999]["success"] is False
+    assert "not found" in results[99999]["error"]
+
+    # 2. Admin calls batch predict for [A, B]
+    admin_payload = {"student_ids": [student_a.id, student_b.id]}
+    admin_resp = test_client.post("/api/predict/batch", json=admin_payload, headers=admin_headers)
+    assert admin_resp.status_code == 200
+    admin_data = admin_resp.json()
+    assert admin_data["total"] == 2
+    assert admin_data["successful"] == 2
+    assert admin_data["failed"] == 0
+
+
+def test_batch_predict_append_only_preserved(
+    test_client: TestClient,
+    admin_user,
+    db_session: Session,
+):
+    """Batch predictions must append new immutable Prediction and Explanation records without modifying existing."""
+    admin_headers = admin_user["headers"]
+
+    student = Student(student_code="STU-IMMUTABLE", school="GP", cohort_year=2026)
+    db_session.add(student)
+    db_session.flush()
+    rec = AcademicRecord(student_id=student.id, **SAMPLE_ACADEMIC_PAYLOAD)
+    db_session.add(rec)
+    db_session.commit()
+
+    initial_preds = db_session.query(Prediction).filter(Prediction.student_id == student.id).count()
+    assert initial_preds == 0
+
+    # First batch predict
+    res1 = test_client.post("/api/predict/batch", json={"student_ids": [student.id]}, headers=admin_headers)
+    assert res1.status_code == 200
+    pred1_id = res1.json()["results"][0]["prediction"]["prediction_id"]
+
+    # Second batch predict (new record appended)
+    res2 = test_client.post("/api/predict/batch", json={"student_ids": [student.id]}, headers=admin_headers)
+    assert res2.status_code == 200
+    pred2_id = res2.json()["results"][0]["prediction"]["prediction_id"]
+
+    assert pred1_id != pred2_id
+
+    # Verify both records exist immutably in DB
+    all_student_preds = db_session.query(Prediction).filter(Prediction.student_id == student.id).all()
+    assert len(all_student_preds) == 2
+    pred_ids = {p.id for p in all_student_preds}
+    assert pred1_id in pred_ids
+    assert pred2_id in pred_ids
+
+
+def test_batch_predict_100_students_under_2_seconds(
+    test_client: TestClient,
+    admin_user,
+    db_session: Session,
+):
+    """NFR Performance Benchmark: A batch of 100 students must complete in under 2 seconds."""
+    admin_headers = admin_user["headers"]
+
+    # Seed 100 students with academic records
+    student_ids = []
+    for i in range(100):
+        student = Student(student_code=f"STU-PERF-{i:03d}", school="GP", cohort_year=2026)
+        db_session.add(student)
+        db_session.flush()
+        rec = AcademicRecord(student_id=student.id, **SAMPLE_ACADEMIC_PAYLOAD)
+        db_session.add(rec)
+        student_ids.append(student.id)
+    db_session.commit()
+
+    # Measure batch predict execution time
+    start_time = time.perf_counter()
+    resp = test_client.post(
+        "/api/predict/batch",
+        json={"student_ids": student_ids},
+        headers=admin_headers,
+    )
+    elapsed_time = time.perf_counter() - start_time
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 100
+    assert data["successful"] == 100
+    assert data["failed"] == 0
+
+    # Assert PRD NFR: must complete in under 2.0 seconds
+    assert elapsed_time < 2.0, f"Batch predict took {elapsed_time:.3f}s which exceeds the 2.0s PRD NFR limit!"
+
+
+def test_configurable_risk_thresholds_settings_validation():
+    """Validates that Settings enforces 0.0 <= RISK_LOW_MAX < RISK_HIGH_MIN <= 1.0."""
+    from backend.app.core.config import Settings
+    from pydantic import ValidationError
+
+    # Valid thresholds
+    valid_s = Settings(RISK_LOW_MAX=0.35, RISK_HIGH_MIN=0.65, BINARY_THRESHOLD=0.50)
+    assert valid_s.RISK_LOW_MAX == 0.35
+    assert valid_s.RISK_HIGH_MIN == 0.65
+
+    # Invalid: low >= high
+    with pytest.raises(ValidationError):
+        Settings(RISK_LOW_MAX=0.75, RISK_HIGH_MIN=0.40)
+
+    # Invalid: low == high
+    with pytest.raises(ValidationError):
+        Settings(RISK_LOW_MAX=0.50, RISK_HIGH_MIN=0.50)
+
+    # Invalid: out of bounds
+    with pytest.raises(ValidationError):
+        Settings(RISK_LOW_MAX=-0.1, RISK_HIGH_MIN=0.70)
+
+
+def test_ml_service_uses_dynamic_thresholds():
+    """Validates that MLService get_thresholds dynamically reflects environment settings."""
+    from backend.app.core.config import settings
+
+    thresholds = ml_service.get_thresholds()
+    assert thresholds["low_max"] == settings.RISK_LOW_MAX
+    assert thresholds["medium_max"] == settings.RISK_HIGH_MIN
+    assert thresholds["binary_decision_threshold"] == settings.BINARY_THRESHOLD
+    assert thresholds["categories"]["Low"] == [0.0, settings.RISK_LOW_MAX]
+    assert thresholds["categories"]["Medium"] == [settings.RISK_LOW_MAX, settings.RISK_HIGH_MIN]
+    assert thresholds["categories"]["High"] == [settings.RISK_HIGH_MIN, 1.0]
+
+

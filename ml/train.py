@@ -1,14 +1,17 @@
-"""Model training and cross-validation module for EduGuard.
+"""Model training, hyperparameter tuning, and cross-validation module for EduGuard.
 
 Executes:
 1. Stratified 80/20 train/test splitting (test set held out strictly for final evaluation).
-2. 5-Fold Stratified Cross-Validation on training split with end-to-end preprocessing pipelines
+2. Hyperparameter tuning using GridSearchCV with Stratified 5-Fold CV on the training split ONLY:
+   - Logistic Regression (C, penalty)
+   - Random Forest (n_estimators, max_depth, min_samples_leaf)
+   - XGBoost (max_depth, learning_rate, n_estimators)
+   - Support Vector Machine (C, kernel)
+   - Scored on Recall (primary refit target), reporting F1 and ROC-AUC.
+   - Best params saved to ml/reports/tuning_results.csv.
+3. 5-Fold Stratified Cross-Validation on training split with end-to-end preprocessing pipelines
    to guarantee zero preprocessing leakage between folds.
-3. Comparative training of Logistic Regression (baseline), Random Forest, and XGBoost.
-4. Class imbalance mitigation using class weighting and scale_pos_weight.
-5. In-depth evaluation of Recall, Precision, F1-Score, ROC-AUC, PR-AUC, and Confusion Matrix
-   for the minority At-Risk class.
-6. Export of model comparison report to ml/reports/model_comparison.csv.
+4. Export of model comparison report to ml/reports/model_comparison.csv.
 """
 
 from pathlib import Path
@@ -16,9 +19,10 @@ from typing import Dict, Any, List, Tuple
 import json
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split, GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
@@ -42,16 +46,24 @@ RANDOM_STATE = 42
 IMBALANCE_SCALE_POS_WEIGHT = 2.04
 
 
-def build_candidate_pipelines() -> Dict[str, Pipeline]:
-    """Instantiates candidate model pipelines with leak-free preprocessing."""
+def build_candidate_pipelines(
+    tuned_params: Dict[str, Dict[str, Any]] = None
+) -> Dict[str, Pipeline]:
+    """Instantiates candidate model pipelines with leak-free preprocessing.
+    
+    If tuned_params is provided, applies tuned hyperparameters to the classifiers.
+    """
     candidates = {}
+    params = tuned_params or {}
 
     # 1. Logistic Regression (Linear baseline with balanced class weights)
+    lr_config = params.get("Logistic Regression", {})
     lr_clf = LogisticRegression(
-        C=0.5,
+        C=lr_config.get("C", 0.05 if "Logistic Regression" in params else 0.5),
+        penalty=lr_config.get("penalty", "l1" if "Logistic Regression" in params else "l2"),
         max_iter=1000,
         class_weight="balanced",
-        solver="lbfgs",
+        solver="liblinear",
         random_state=RANDOM_STATE
     )
     candidates["Logistic Regression"] = Pipeline([
@@ -60,11 +72,12 @@ def build_candidate_pipelines() -> Dict[str, Pipeline]:
     ])
 
     # 2. Random Forest (Non-linear ensemble with balanced subsample weighting)
+    rf_config = params.get("Random Forest", {})
     rf_clf = RandomForestClassifier(
-        n_estimators=150,
-        max_depth=5,
-        min_samples_split=4,
-        min_samples_leaf=2,
+        n_estimators=rf_config.get("n_estimators", 150),
+        max_depth=rf_config.get("max_depth", 5),
+        min_samples_split=rf_config.get("min_samples_split", 4),
+        min_samples_leaf=rf_config.get("min_samples_leaf", 2),
         class_weight="balanced",
         random_state=RANDOM_STATE,
         n_jobs=-1
@@ -75,10 +88,11 @@ def build_candidate_pipelines() -> Dict[str, Pipeline]:
     ])
 
     # 3. XGBoost (Gradient boosted decision trees with scale_pos_weight)
+    xgb_config = params.get("XGBoost", {})
     xgb_clf = XGBClassifier(
-        n_estimators=100,
-        max_depth=3,
-        learning_rate=0.05,
+        n_estimators=xgb_config.get("n_estimators", 100),
+        max_depth=xgb_config.get("max_depth", 3),
+        learning_rate=xgb_config.get("learning_rate", 0.05),
         scale_pos_weight=IMBALANCE_SCALE_POS_WEIGHT,
         subsample=0.8,
         colsample_bytree=0.8,
@@ -91,7 +105,132 @@ def build_candidate_pipelines() -> Dict[str, Pipeline]:
         ("classifier", xgb_clf)
     ])
 
+    # 4. Support Vector Machine (SVC with probability=True, class_weight='balanced')
+    svm_config = params.get("Support Vector Machine", params.get("SVM", {}))
+    svm_clf = SVC(
+        C=svm_config.get("C", 0.5 if ("Support Vector Machine" in params or "SVM" in params) else 1.0),
+        kernel=svm_config.get("kernel", "rbf"),
+        probability=True,
+        class_weight="balanced",
+        random_state=RANDOM_STATE
+    )
+    candidates["Support Vector Machine"] = Pipeline([
+        ("features", create_feature_pipeline()),
+        ("classifier", svm_clf)
+    ])
+
     return candidates
+
+
+# Hyperparameter search grids for each candidate model
+TUNING_GRIDS: Dict[str, Dict[str, List[Any]]] = {
+    "Logistic Regression": {
+        "classifier__C": [0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0],
+        "classifier__penalty": ["l1", "l2"],
+    },
+    "Random Forest": {
+        "classifier__n_estimators": [50, 100, 150],
+        "classifier__max_depth": [3, 5, 8, None],
+        "classifier__min_samples_leaf": [1, 2, 4],
+    },
+    "XGBoost": {
+        "classifier__max_depth": [2, 3, 5],
+        "classifier__learning_rate": [0.01, 0.05, 0.1],
+        "classifier__n_estimators": [50, 100, 150],
+    },
+    "Support Vector Machine": {
+        "classifier__C": [0.1, 0.5, 1.0, 5.0],
+        "classifier__kernel": ["linear", "rbf"],
+    },
+}
+
+
+def tune_hyperparameters(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    reports_dir: str | Path = "ml/reports",
+    n_splits: int = 5
+) -> Tuple[pd.DataFrame, Dict[str, Pipeline], Dict[str, Dict[str, Any]]]:
+    """Runs GridSearchCV for all candidate models using Stratified 5-Fold CV.
+    
+    Tuning is performed ONLY on the training split (test set held out strictly).
+    Scoring is optimized primarily on Recall (refit='recall') while reporting F1 and ROC-AUC.
+    Saves best params to ml/reports/tuning_results.csv.
+    """
+    reports_path = Path(reports_dir)
+    reports_path.mkdir(parents=True, exist_ok=True)
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
+    scoring = {
+        "recall": "recall",
+        "f1": "f1",
+        "roc_auc": "roc_auc"
+    }
+
+    base_candidates = build_candidate_pipelines()
+    tuning_rows: List[Dict[str, Any]] = []
+    best_pipelines: Dict[str, Pipeline] = {}
+    best_params_dict: Dict[str, Dict[str, Any]] = {}
+
+    print("\n" + "=" * 60)
+    print("Hyperparameter Tuning via Stratified 5-Fold CV (Refit = Recall)")
+    print("=" * 60)
+
+    for name, pipeline in base_candidates.items():
+        param_grid = TUNING_GRIDS.get(name)
+        if not param_grid:
+            best_pipelines[name] = pipeline
+            continue
+
+        print(f"Tuning {name} over grid {list(param_grid.keys())}...")
+        grid = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            scoring=scoring,
+            refit="recall",
+            cv=skf,
+            n_jobs=-1
+        )
+        grid.fit(X_train, y_train)
+
+        best_idx = grid.best_index_
+        best_pipe = grid.best_estimator_
+        best_pipelines[name] = best_pipe
+
+        # Clean parameter names by stripping 'classifier__' prefix
+        clean_params = {
+            k.replace("classifier__", ""): v for k, v in grid.best_params_.items()
+        }
+        best_params_dict[name] = clean_params
+
+        mean_rec = float(grid.cv_results_["mean_test_recall"][best_idx])
+        std_rec = float(grid.cv_results_["std_test_recall"][best_idx])
+        mean_f1 = float(grid.cv_results_["mean_test_f1"][best_idx])
+        std_f1 = float(grid.cv_results_["std_test_f1"][best_idx])
+        mean_auc = float(grid.cv_results_["mean_test_roc_auc"][best_idx])
+        std_auc = float(grid.cv_results_["std_test_roc_auc"][best_idx])
+
+        tuning_rows.append({
+            "model": name,
+            "best_params": json.dumps(clean_params),
+            "cv_recall_mean": mean_rec,
+            "cv_recall_std": std_rec,
+            "cv_f1_mean": mean_f1,
+            "cv_f1_std": std_f1,
+            "cv_roc_auc_mean": mean_auc,
+            "cv_roc_auc_std": std_auc,
+            "primary_scorer": "recall",
+        })
+
+        print(f"  Best params: {clean_params}")
+        print(f"  CV Recall: {mean_rec*100:.2f}% (±{std_rec*100:.2f}%) | CV F1: {mean_f1*100:.2f}% | CV ROC-AUC: {mean_auc*100:.2f}%")
+
+    tuning_df = pd.DataFrame(tuning_rows)
+    tuning_csv = reports_path / "tuning_results.csv"
+    tuning_df.to_csv(tuning_csv, index=False)
+    print(f"\nTuning results successfully written to: {tuning_csv.resolve()}")
+
+    return tuning_df, best_pipelines, best_params_dict
 
 
 def evaluate_cv_pipeline(
@@ -172,7 +311,7 @@ def train_and_compare_models(
     validate_feature_input(X)
 
     # 2. Stratified 80/20 train/test split
-    # Test set is locked and preserved strictly for final validation in Sub-step 1.4
+    # Test set is locked and preserved strictly for final validation
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, random_state=RANDOM_STATE, stratify=y
     )
@@ -194,12 +333,15 @@ def train_and_compare_models(
     print(f"Held-out test set:  {len(X_test)} (At Risk: {y_test.sum()} = {y_test.mean()*100:.1f}%)")
     print(f"Preprocessing:      Strictly inside 5-fold CV (zero leakage)\n")
 
-    # 3. Evaluate each candidate model
-    candidates = build_candidate_pipelines()
-    results = []
+    # 3. Hyperparameter Tuning strictly on training split
+    tuning_df, tuned_pipelines, best_params_dict = tune_hyperparameters(
+        X_train, y_train, reports_dir=reports_path, n_splits=5
+    )
 
-    for name, pipeline in candidates.items():
-        print(f"Running 5-fold CV for: {name} ...")
+    # 4. Evaluate each tuned candidate model via full 5-fold CV for comprehensive metrics
+    results = []
+    for name, pipeline in tuned_pipelines.items():
+        print(f"Running full 5-fold CV evaluation for: {name} ...")
         cv_summary = evaluate_cv_pipeline(pipeline, X_train, y_train, n_splits=5)
         cv_summary["model"] = name
         results.append(cv_summary)
@@ -236,7 +378,7 @@ def train_and_compare_models(
 
     print("\nAggregate Cross-Validation Confusion Matrices (across all 316 training samples):")
     for _, row in results_df.iterrows():
-        print(f"  {row['model']:20s} -> TP={row['total_tp']:3d} | FN={row['total_fn']:2d} | FP={row['total_fp']:2d} | TN={row['total_tn']:3d}")
+        print(f"  {row['model']:24s} -> TP={row['total_tp']:3d} | FN={row['total_fn']:2d} | FP={row['total_fp']:2d} | TN={row['total_tn']:3d}")
 
     # Generate training summary text file
     summary_path = reports_path / "training_summary.txt"

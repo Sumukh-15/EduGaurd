@@ -6,14 +6,17 @@ Sub-step 2.7:
 
 import io
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.core.security import create_access_token, get_password_hash
 from backend.app.models.academic_record import AcademicRecord
+from backend.app.models.explanation import Explanation
 from backend.app.models.prediction import Prediction
 from backend.app.models.student import Student
 from backend.app.models.user import User
+from backend.app.services.ml_service import ml_service
 
 
 # Complete 32-feature CSV header + optional metadata
@@ -287,12 +290,69 @@ def test_upload_security_path_traversal_neutralized(test_client: TestClient, fac
 
 
 def test_upload_no_unintended_predictions_created(test_client: TestClient, faculty_auth, db_session: Session):
-    """Uploading academic records must NEVER automatically create prediction records."""
+    """Uploading academic records must NEVER automatically create prediction records by default."""
     initial_predictions = db_session.query(Prediction).count()
 
     files = {"file": ("telemetry_only.csv", io.BytesIO(VALID_CSV_CONTENT.encode("utf-8")), "text/csv")}
     res = test_client.post("/api/dataset/upload", files=files, headers=faculty_auth["headers"])
     assert res.status_code == 201
+    data = res.json()
+    assert data["predictions_created"] == 0
+    assert data["risk_summary"] is None
 
     after_predictions = db_session.query(Prediction).count()
     assert after_predictions == initial_predictions, "Predictions must not be automatically generated during upload!"
+
+
+def test_upload_opt_in_predictions_created(test_client: TestClient, faculty_auth, db_session: Session):
+    """When run_predictions=true, predictions and SHAP explanations must be created and persisted."""
+    initial_predictions = db_session.query(Prediction).count()
+    initial_explanations = db_session.query(Explanation).count()
+
+    files = {"file": ("students_predict.csv", io.BytesIO(VALID_CSV_CONTENT.encode("utf-8")), "text/csv")}
+    res = test_client.post("/api/dataset/upload?run_predictions=true", files=files, headers=faculty_auth["headers"])
+    assert res.status_code == 201
+
+    data = res.json()
+    assert data["records_created"] == 2
+    assert data["predictions_created"] == 2
+    assert data["risk_summary"] is not None
+    assert set(data["risk_summary"].keys()) == {"low", "medium", "high"}
+    assert sum(data["risk_summary"].values()) == 2
+    assert "generated 2 risk predictions" in data["message"]
+
+    after_predictions = db_session.query(Prediction).count()
+    assert after_predictions == initial_predictions + 2
+
+    after_explanations = db_session.query(Explanation).count()
+    assert after_explanations > initial_explanations
+
+    # Verify predictions are linked to the newly created academic records
+    new_preds = db_session.query(Prediction).order_by(Prediction.id.desc()).limit(2).all()
+    for pred in new_preds:
+        assert pred.risk_level in ("Low", "Medium", "High")
+        assert 0.0 <= pred.risk_probability <= 1.0
+        assert pred.academic_record_id is not None
+        # Verify linked explanations exist
+        linked_exps = db_session.query(Explanation).filter(Explanation.prediction_id == pred.id).all()
+        assert len(linked_exps) > 0
+
+
+def test_upload_opt_in_rollback_on_prediction_failure(test_client: TestClient, faculty_auth, db_session: Session):
+    """When run_predictions=true and inference fails, the entire transaction must roll back."""
+    initial_students = db_session.query(Student).count()
+    initial_records = db_session.query(AcademicRecord).count()
+    initial_preds = db_session.query(Prediction).count()
+
+    files = {"file": ("students_fail.csv", io.BytesIO(VALID_CSV_CONTENT.encode("utf-8")), "text/csv")}
+    with patch.object(ml_service, "predict_batch", side_effect=RuntimeError("Simulated ML failure")):
+        res = test_client.post("/api/dataset/upload?run_predictions=true", files=files, headers=faculty_auth["headers"])
+
+    assert res.status_code == 500
+    assert "database transaction error" in res.json()["detail"]
+
+    # Verify atomic rollback: zero students, zero records, zero predictions persisted
+    assert db_session.query(Student).count() == initial_students
+    assert db_session.query(AcademicRecord).count() == initial_records
+    assert db_session.query(Prediction).count() == initial_preds
+

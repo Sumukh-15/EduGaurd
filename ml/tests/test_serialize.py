@@ -13,6 +13,7 @@ from ml.serialize import (
     load_model_metadata,
     predict_student,
     classify_risk_level,
+    get_risk_thresholds,
     RISK_THRESHOLDS,
     export_pipeline_artifacts
 )
@@ -33,12 +34,16 @@ def sample_test_student():
 
 
 def test_artifacts_exist_and_non_empty(artifacts):
-    """Verifies that model_v1.joblib and model_metadata.json are properly generated."""
+    """Verifies that model_v1_1.joblib and model_metadata.json exist, and model_v1.joblib is preserved."""
     model_path, meta_path = artifacts
-    assert model_path.exists(), "model_v1.joblib is missing"
+    assert model_path.exists(), "model_v1_1.joblib is missing"
     assert meta_path.exists(), "model_metadata.json is missing"
-    assert model_path.stat().st_size > 1024, "model_v1.joblib is unexpectedly small"
+    assert model_path.stat().st_size > 1024, "model_v1_1.joblib is unexpectedly small"
     assert meta_path.stat().st_size > 500, "model_metadata.json is unexpectedly small"
+
+    # Backward traceability verification
+    legacy_model = Path("ml/artifacts/model_v1.joblib")
+    assert legacy_model.exists(), "model_v1.joblib must be preserved for backward traceability"
 
 
 def test_metadata_structure_and_anti_leakage(artifacts):
@@ -47,10 +52,11 @@ def test_metadata_structure_and_anti_leakage(artifacts):
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
-    assert meta["model_version"] == "v1.0.0"
+    assert meta["model_version"] == "v1.1.0"
     assert "environment" in meta
     assert "python_version" in meta["environment"]
     assert "scikit_learn_version" in meta["environment"]
+    assert "tuned_hyperparameters" in meta
 
     schema = meta["schema"]
     assert schema["raw_feature_count"] == 32
@@ -62,6 +68,26 @@ def test_metadata_structure_and_anti_leakage(artifacts):
     assert thresholds["low_max"] == 0.40
     assert thresholds["medium_max"] == 0.70
     assert thresholds["binary_decision_threshold"] == 0.50
+
+
+def test_configurable_thresholds_validation():
+    """Verifies that threshold boundaries enforce low < high validation."""
+    valid_t = get_risk_thresholds(low_max=0.35, high_min=0.65, binary_threshold=0.50)
+    assert valid_t["low_max"] == 0.35
+    assert valid_t["medium_max"] == 0.65
+    assert valid_t["categories"]["Low"] == [0.0, 0.35]
+
+    # Inverted thresholds must raise ValueError
+    with pytest.raises(ValueError, match="strictly less than"):
+        get_risk_thresholds(low_max=0.75, high_min=0.40)
+
+    # Equal thresholds must raise ValueError
+    with pytest.raises(ValueError, match="strictly less than"):
+        get_risk_thresholds(low_max=0.50, high_min=0.50)
+
+    # Out of range thresholds must raise ValueError
+    with pytest.raises(ValueError):
+        get_risk_thresholds(low_max=-0.1, high_min=0.70)
 
 
 def test_prediction_consistency_before_and_after_save(artifacts):

@@ -286,7 +286,7 @@ def run_acceptance_audit():
         p_row = db.query(Prediction).filter(Prediction.id == prediction_id).first()
         assert p_row is not None
         assert p_row.student_id == stu_a_id
-        assert p_row.model_version == "v1.0.0"
+        assert p_row.model_version in ("v1.0.0", "v1.1.0")
 
         exp_rows = db.query(Explanation).filter(Explanation.prediction_id == prediction_id).all()
         assert len(exp_rows) == 5
