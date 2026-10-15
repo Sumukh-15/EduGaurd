@@ -1,9 +1,12 @@
 import { api } from "./client";
 import {
+  AcademicUpdateResponse,
+  FacultyAcademicUpdatePayload,
   PredictRequest,
   PredictResponse,
   StudentDetail,
   StudentHistoryResponse,
+  StudentSelfReportUpdatePayload,
 } from "@/types/student";
 
 /**
@@ -45,3 +48,26 @@ export async function predictStudentRisk(
 ): Promise<PredictResponse> {
   return api.post<PredictResponse>("/api/predict", payload);
 }
+
+/**
+ * Student self-reported study habits update.
+ * Allows student to update weekly study time and study habits without altering verified faculty marks.
+ */
+export async function updateStudentSelfReported(
+  id: number,
+  payload: StudentSelfReportUpdatePayload
+): Promise<AcademicUpdateResponse> {
+  return api.post<AcademicUpdateResponse>(`/api/students/${id}/self-reported`, payload);
+}
+
+/**
+ * Faculty verified academic update.
+ * Allows faculty/admin to record new verified assessment marks, attendance, and assessment details.
+ */
+export async function submitFacultyAcademicUpdate(
+  id: number,
+  payload: FacultyAcademicUpdatePayload
+): Promise<AcademicUpdateResponse> {
+  return api.post<AcademicUpdateResponse>(`/api/students/${id}/faculty-update`, payload);
+}
+

@@ -20,3 +20,13 @@ export async function login(credentials: LoginRequest): Promise<LoginResponse> {
 export async function getCurrentUser(): Promise<User> {
   return api.get<User>("/api/auth/me");
 }
+
+/**
+ * Revokes the current access token on the backend by denylisting its jti.
+ *
+ * @returns Logout confirmation message
+ */
+export async function logout(): Promise<{ message: string }> {
+  return api.post<{ message: string }>("/api/auth/logout");
+}
+

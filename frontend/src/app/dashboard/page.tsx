@@ -17,6 +17,8 @@ export default function DashboardIndexPage() {
 
     if (!isAuthenticated || !user) {
       router.replace("/login");
+    } else if (user.role === "admin") {
+      router.replace("/dashboard/admin");
     } else if (user.role === "student") {
       router.replace("/dashboard/student");
     } else {
@@ -26,8 +28,8 @@ export default function DashboardIndexPage() {
 
   return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center">
-      <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mb-3" />
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+      <div className="w-8 h-8 border-3 border-edugreen border-t-transparent rounded-full animate-spin mb-3" />
+      <p className="text-xs font-medium text-ink/65">
         Navigating to role portal...
       </p>
     </div>

@@ -182,8 +182,8 @@ def test_login_inactive_user_rejected(test_client, db_session):
         json={"email": "inactive@school.edu", "password": "Password123!"},
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Inactive user account"
+    assert response.status_code == 401
+    assert "incorrect email or password" in response.json()["detail"].lower()
 
 
 # --- 4. Current User Profile Endpoint (/api/auth/me) & Secret Isolation ---
@@ -339,3 +339,49 @@ def test_verify_student_access_faculty_and_admin_permitted(db_session):
         verify_student_access(student_id=101, current_user=faculty_user, db=db_session)
     assert exc_info.value.status_code == 403
     assert "not assigned to your mentorship roster" in exc_info.value.detail
+
+
+# --- 7. Token Revocation & Logout Tests ---
+
+def test_logout_revokes_token_and_rejects_subsequent_requests(test_client, db_session):
+    """Verify that logging out revokes the access token and subsequent requests fail with 401."""
+    user = User(
+        email="revoketest@school.edu",
+        hashed_password=get_password_hash("Password123!"),
+        full_name="Revoke Tester",
+        role="student",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Login to obtain a token
+    login_resp = test_client.post(
+        "/api/auth/login",
+        json={"email": "revoketest@school.edu", "password": "Password123!"},
+    )
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Verify token works on /api/auth/me
+    me_resp = test_client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    assert me_resp.json()["email"] == "revoketest@school.edu"
+
+    # Call logout
+    logout_resp = test_client.post("/api/auth/logout", headers=headers)
+    assert logout_resp.status_code == 200
+    assert logout_resp.json()["message"] == "Successfully logged out"
+
+    # Now verify token is rejected with 401
+    me_after_logout = test_client.get("/api/auth/me", headers=headers)
+    assert me_after_logout.status_code == 401
+    assert "Token has been revoked" in me_after_logout.json()["detail"]
+
+
+def test_logout_without_auth_returns_401(test_client):
+    """Verify calling logout without a bearer token returns 401 Unauthorized."""
+    resp = test_client.post("/api/auth/logout")
+    assert resp.status_code == 401
+

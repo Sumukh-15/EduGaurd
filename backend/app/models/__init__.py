@@ -10,6 +10,8 @@ from backend.app.models.prediction import Prediction
 from backend.app.models.explanation import Explanation
 from backend.app.models.recommendation import Recommendation
 from backend.app.models.assignment import MentorAssignment
+from backend.app.models.audit_log import AuditLog
+from backend.app.models.revoked_token import RevokedToken
 
 __all__ = [
     "User",
@@ -19,4 +21,6 @@ __all__ = [
     "Explanation",
     "Recommendation",
     "MentorAssignment",
+    "AuditLog",
+    "RevokedToken",
 ]

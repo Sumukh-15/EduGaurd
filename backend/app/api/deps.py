@@ -11,6 +11,7 @@ from backend.app.core.security import decode_access_token
 from backend.app.db.session import get_db
 from backend.app.models.user import User
 from backend.app.models.assignment import MentorAssignment
+from backend.app.models.revoked_token import RevokedToken
 
 # OAuth2 scheme pointing to token endpoint
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
@@ -22,7 +23,7 @@ def get_current_user(
 ) -> User:
     """Validate Bearer token and retrieve the authenticated active user.
 
-    Raises 401 Unauthorized if token is missing, invalid, or expired.
+    Raises 401 Unauthorized if token is missing, invalid, expired, or revoked.
     Raises 400 Bad Request if the account is deactivated.
     """
     credentials_exception = HTTPException(
@@ -37,18 +38,26 @@ def get_current_user(
         if user_id_str is None:
             raise credentials_exception
         user_id = int(user_id_str)
+        jti = payload.get("jti")
     except (JWTError, ValueError):
         raise credentials_exception
+
+    # Check denylist if jti is present
+    if jti:
+        is_revoked = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
+        if is_revoked:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user account",
-        )
+        raise credentials_exception
 
     return user
 

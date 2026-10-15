@@ -24,16 +24,40 @@ const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Actionable Academic Guidance & Support Rules",
   },
   "/dashboard/faculty": {
-    title: "Faculty Analytics",
+    title: "Faculty Overview",
     subtitle: "Cohort Risk Distribution & Student Population Overview",
+  },
+  "/dashboard/faculty/students": {
+    title: "Student Cohort Roster",
+    subtitle: "Academic Directory & Operational Risk Triage",
   },
   "/dashboard/faculty/review": {
     title: "Student Review",
-    subtitle: "Direct Student ID Lookup & Risk Explanation",
+    subtitle: "Direct Student ID Inspection & Performance Evaluation",
+  },
+  "/dashboard/faculty/analytics": {
+    title: "Cohort Analytics",
+    subtitle: "Longitudinal Trends & Class Performance Metrics",
   },
   "/dashboard/faculty/upload": {
     title: "Dataset Management",
     subtitle: "Batch CSV Student Academic Records Ingestion",
+  },
+  "/dashboard/admin": {
+    title: "Administrative Console",
+    subtitle: "Institutional Health, Telemetry & Audit Stream",
+  },
+  "/dashboard/admin/users": {
+    title: "User Directory & Access",
+    subtitle: "Identity Provisioning & Role-Based Access Control",
+  },
+  "/dashboard/admin/model": {
+    title: "Model Governance",
+    subtitle: "Inference Engine Metadata, Test Metrics & Feature Registry",
+  },
+  "/dashboard/admin/dataset": {
+    title: "Dataset Administration",
+    subtitle: "Batch Records Ingestion & Schema Verification",
   },
 };
 
@@ -50,11 +74,11 @@ export default function Topbar({ onOpenMobileMenu }: TopbarProps) {
 
   const roleBadgeStyles: Record<UserRole, string> = {
     student:
-      "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800",
+      "bg-softgreen text-edugreen font-bold border-softgreen-border",
     faculty:
-      "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-800",
+      "bg-amber-soft text-amber font-bold border-amber/30",
     admin:
-      "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-400 dark:border-purple-800",
+      "bg-slate-100 text-ink font-bold border-slate-200",
   };
 
   const roleNames: Record<UserRole, string> = {
@@ -64,23 +88,23 @@ export default function Topbar({ onOpenMobileMenu }: TopbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+    <header className="sticky top-0 z-20 h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
       {/* Left: Mobile Menu Toggle & Title */}
       <div className="flex items-center gap-3 sm:gap-4 min-w-0">
         <button
           type="button"
           onClick={onOpenMobileMenu}
           aria-label="Open navigation menu"
-          className="lg:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
+          className="lg:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-edugreen transition-colors"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         <div className="min-w-0">
-          <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate leading-tight">
+          <h1 className="text-base sm:text-lg font-extrabold text-ink truncate leading-tight tracking-tight">
             {currentRouteInfo.title}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
+          <p className="text-xs text-slate-500 truncate hidden sm:block">
             {currentRouteInfo.subtitle}
           </p>
         </div>
@@ -88,13 +112,13 @@ export default function Topbar({ onOpenMobileMenu }: TopbarProps) {
 
       {/* Right: Security Badge, Role Indicator & Quick Logout */}
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 text-xs font-medium border border-slate-200/80 dark:border-slate-700/80">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          <span>PostgreSQL Active</span>
+        <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full bg-paper text-slate-600 text-xs font-semibold border border-slate-200/80">
+          <ShieldCheck className="w-3.5 h-3.5 text-edugreen" />
+          <span>Decision Support Engine Active</span>
         </div>
 
         <span
-          className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${roleBadgeStyles[role]}`}
+          className={`text-[11px] font-bold px-3 py-1 rounded-full border ${roleBadgeStyles[role]}`}
         >
           {roleNames[role]}
         </span>
@@ -103,7 +127,7 @@ export default function Topbar({ onOpenMobileMenu }: TopbarProps) {
           onClick={logout}
           aria-label="Sign out"
           title="Sign out of EduGuard"
-          className="p-2 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 dark:text-slate-400 dark:hover:text-rose-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          className="p-2 rounded-xl text-slate-500 hover:text-coral hover:bg-coral-soft transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-coral"
         >
           <LogOut className="w-4 h-4" />
         </button>

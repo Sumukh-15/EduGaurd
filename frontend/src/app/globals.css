@@ -1,1 +1,151 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-display), "DM Serif Display", Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --color-ink: #12181e;
+  --color-ink-muted: #52606d;
+  --color-paper: #f7f8f4;
+  --color-paper-card: #ffffff;
+  --color-edugreen: #27ac1f;
+  --color-edugreen-dark: #1e8717;
+  --color-mint: #85fe78;
+  --color-softgreen: #e7f7e4;
+  --color-softgreen-border: #bce6b7;
+  --color-amber: #f4b740;
+  --color-amber-soft: #fef7e8;
+  --color-coral: #e85d5d;
+  --color-coral-soft: #fdeeee;
+}
+
+:root {
+  --bg-primary: #f7f8f4;
+  --text-primary: #12181e;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Custom smooth scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d8ded3;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aab6a3;
+}
+
+/* Educational Trajectory Motifs */
+.trajectory-line {
+  background: linear-gradient(90deg, #27ac1f 0%, #85fe78 100%);
+}
+
+.paper-surface {
+  background-color: #ffffff;
+  border: 1px solid rgba(18, 24, 30, 0.08);
+  box-shadow: 0 1px 3px 0 rgba(18, 24, 30, 0.04), 0 1px 2px -1px rgba(18, 24, 30, 0.04);
+}
+
+.paper-surface-interactive {
+  background-color: #ffffff;
+  border: 1px solid rgba(18, 24, 30, 0.08);
+  box-shadow: 0 1px 3px 0 rgba(18, 24, 30, 0.04);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.paper-surface-interactive:hover {
+  border-color: rgba(39, 172, 31, 0.35);
+  box-shadow: 0 4px 14px -2px rgba(18, 24, 30, 0.08);
+  transform: translateY(-1.5px);
+}
+
+/* Interactive Navigation & Buttons */
+.btn-interactive {
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.btn-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgba(18, 24, 30, 0.08);
+}
+.btn-interactive:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(18, 24, 30, 0.04);
+}
+
+/* Subtle table row hover */
+.table-row-hover {
+  transition: background-color 160ms ease;
+}
+.table-row-hover:hover {
+  background-color: rgba(39, 172, 31, 0.035);
+}
+
+/* Smooth restrained page entrance */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: pageEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Smooth modal backdrop and panel entrance */
+@keyframes modalPanelEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-panel-enter {
+  animation: modalPanelEnter 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Icon hover shift */
+.icon-shift {
+  transition: transform 180ms ease;
+}
+.group:hover .icon-shift {
+  transform: translateY(-1px);
+}
+
+/* Animation Safety - Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .page-enter,
+  .modal-panel-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

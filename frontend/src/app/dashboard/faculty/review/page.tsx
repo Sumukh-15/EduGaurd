@@ -4,11 +4,11 @@ import React, { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  CheckCircle,
+  Lightbulb,
   Loader2,
   Lock,
-  RefreshCw,
   Search,
-  Shield,
   UserCheck,
   UserX,
 } from "lucide-react";
@@ -17,14 +17,18 @@ import ExplainabilityView from "@/components/student/ExplainabilityView";
 import RiskGaugeCard from "@/components/student/RiskGaugeCard";
 import StudentIdentityCard from "@/components/student/StudentIdentityCard";
 import StudentAcademicReviewSummary from "@/components/faculty/StudentAcademicReviewSummary";
+import RecommendationCard from "@/components/student/RecommendationCard";
 import { ApiClientError } from "@/lib/api/client";
 import { getStudentHistory, getStudentProfile, predictStudentRisk } from "@/lib/api/students";
+import { getStudentRecommendations } from "@/lib/api/recommendations";
 import {
+  AcademicUpdateResponse,
   FactorContribution,
   PredictionHistoryItem,
   StudentDetail,
   StudentHistoryResponse,
 } from "@/types/student";
+import { RecommendationRead } from "@/types/recommendation";
 
 function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiClientError) {
@@ -51,6 +55,7 @@ function StudentReviewContent() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [notFoundId, setNotFoundId] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // Loaded data
   const [student, setStudent] = useState<StudentDetail | null>(null);
@@ -58,6 +63,7 @@ function StudentReviewContent() {
   const [latestPrediction, setLatestPrediction] = useState<PredictionHistoryItem | null>(null);
   const [factors, setFactors] = useState<FactorContribution[]>([]);
   const [causalDisclaimer, setCausalDisclaimer] = useState<string | undefined>(undefined);
+  const [recommendations, setRecommendations] = useState<RecommendationRead[]>([]);
 
   // Execute lookup for a given student ID
   const executeLookup = React.useCallback(async (id: number) => {
@@ -68,31 +74,37 @@ function StudentReviewContent() {
     setNotFoundId(null);
     setActiveStudentId(id);
 
-    // Clear previous student payload to avoid stale display
+    // Clear previous student payload
     setStudent(null);
     setHistory(null);
     setLatestPrediction(null);
     setFactors([]);
     setCausalDisclaimer(undefined);
+    setRecommendations([]);
 
     try {
-      // Parallel fetch: profile and longitudinal telemetry history
-      const [profileData, historyData] = await Promise.all([
+      // Parallel fetch: profile, history, and recommendations
+      const [profileData, historyData, recData] = await Promise.all([
         getStudentProfile(id),
         getStudentHistory(id, "desc"),
+        getStudentRecommendations(id).catch(() => null),
       ]);
 
       setStudent(profileData);
       setHistory(historyData);
+      if (recData?.recommendations) {
+        setRecommendations(recData.recommendations);
+      }
 
-      // PREDICTION REUSE:
-      // If a latest prediction exists in history, display it directly.
-      // Do NOT create an unnecessary duplicate prediction record.
       if (historyData.latest_prediction) {
         setLatestPrediction(historyData.latest_prediction);
 
-        // Check if SHAP factors were cached in sessionStorage for this prediction
-        if (typeof window !== "undefined") {
+        if (
+          historyData.latest_prediction.top_factors &&
+          historyData.latest_prediction.top_factors.length > 0
+        ) {
+          setFactors(historyData.latest_prediction.top_factors);
+        } else if (typeof window !== "undefined") {
           const cachedKey = `eduguard_shap_factors_${id}`;
           const cached = sessionStorage.getItem(cachedKey);
           if (cached) {
@@ -126,75 +138,16 @@ function StudentReviewContent() {
     }
   }, []);
 
-  // Check URL query param on mount (e.g. /dashboard/faculty/review?id=1)
+  // Check URL query param on mount
   useEffect(() => {
     const idParam = searchParams.get("id");
     if (!idParam) return;
     const parsed = parseInt(idParam, 10);
     if (isNaN(parsed) || parsed <= 0) return;
 
-    let isMounted = true;
-
-    async function loadParamStudent() {
-      try {
-        const [profileData, historyData] = await Promise.all([
-          getStudentProfile(parsed),
-          getStudentHistory(parsed, "desc"),
-        ]);
-        if (!isMounted) return;
-
-        setStudent(profileData);
-        setHistory(historyData);
-        setActiveStudentId(parsed);
-        setHasSearched(true);
-        setValidationError(null);
-        setErrorMessage(null);
-        setNotFoundId(null);
-
-        if (historyData.latest_prediction) {
-          setLatestPrediction(historyData.latest_prediction);
-          if (typeof window !== "undefined") {
-            const cachedKey = `eduguard_shap_factors_${parsed}`;
-            const cached = sessionStorage.getItem(cachedKey);
-            if (cached) {
-              try {
-                const p = JSON.parse(cached);
-                if (p.prediction_id === historyData.latest_prediction.id && Array.isArray(p.factors)) {
-                  setFactors(p.factors);
-                  setCausalDisclaimer(p.disclaimer);
-                }
-              } catch {
-                sessionStorage.removeItem(cachedKey);
-              }
-            }
-          }
-        }
-      } catch (err: unknown) {
-        if (!isMounted) return;
-        setHasSearched(true);
-        setActiveStudentId(parsed);
-        if (err instanceof ApiClientError && err.status === 404) {
-          setNotFoundId(parsed);
-        } else if (err instanceof ApiClientError && err.status === 403) {
-          setErrorMessage(
-            "Access Denied: You do not have institutional authorization to review this student record."
-          );
-        } else {
-          setErrorMessage(extractErrorMessage(err));
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadParamStudent();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    executeLookup(parsed);
+  }, [searchParams, executeLookup]);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,7 +167,7 @@ function StudentReviewContent() {
     executeLookup(parsedId);
   };
 
-  // Evaluate telemetry via existing POST /api/predict
+  // Evaluate risk via POST /api/predict
   const handleEvaluateTelemetry = async () => {
     if (!activeStudentId) return;
 
@@ -233,13 +186,13 @@ function StudentReviewContent() {
         at_risk_binary: predRes.at_risk_binary,
         model_version: predRes.model_version,
         created_at: predRes.created_at,
+        top_factors: predRes.top_factors,
       };
 
       setLatestPrediction(newPredItem);
       setFactors(predRes.top_factors || []);
       setCausalDisclaimer(predRes.causal_disclaimer);
 
-      // Cache SHAP factors in sessionStorage for future inspection
       if (typeof window !== "undefined") {
         sessionStorage.setItem(
           `eduguard_shap_factors_${activeStudentId}`,
@@ -251,9 +204,15 @@ function StudentReviewContent() {
         );
       }
 
-      // Refresh longitudinal history to reflect newly appended prediction
-      const updatedHistory = await getStudentHistory(activeStudentId, "desc");
+      // Refresh history & recommendations
+      const [updatedHistory, updatedRecs] = await Promise.all([
+        getStudentHistory(activeStudentId, "desc"),
+        getStudentRecommendations(activeStudentId).catch(() => null),
+      ]);
       setHistory(updatedHistory);
+      if (updatedRecs?.recommendations) {
+        setRecommendations(updatedRecs.recommendations);
+      }
     } catch (err: unknown) {
       setErrorMessage(extractErrorMessage(err));
     } finally {
@@ -261,64 +220,105 @@ function StudentReviewContent() {
     }
   };
 
+  // Faculty data update success handler
+  const handleAcademicUpdateSuccess = async (response: AcademicUpdateResponse) => {
+    setSuccessToast(
+      "Verified academic update recorded in PostgreSQL. ML risk assessment & recommendations updated."
+    );
+    setTimeout(() => setSuccessToast(null), 6000);
+
+    if (response.prediction) {
+      const pred = response.prediction;
+      const newPredItem: PredictionHistoryItem = {
+        id: pred.prediction_id,
+        student_id: pred.student_id,
+        academic_record_id: pred.academic_record_id,
+        risk_probability: pred.risk_probability,
+        risk_level: pred.risk_level,
+        at_risk_binary: pred.at_risk_binary,
+        model_version: pred.model_version,
+        created_at: pred.created_at,
+        top_factors: pred.top_factors,
+      };
+
+      setLatestPrediction(newPredItem);
+      setFactors(pred.top_factors || []);
+      setCausalDisclaimer(pred.causal_disclaimer);
+    }
+
+    if (activeStudentId) {
+      try {
+        const [updatedHistory, updatedRecs] = await Promise.all([
+          getStudentHistory(activeStudentId, "desc"),
+          getStudentRecommendations(activeStudentId).catch(() => null),
+        ]);
+        setHistory(updatedHistory);
+        if (updatedRecs?.recommendations) {
+          setRecommendations(updatedRecs.recommendations);
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+  };
+
   return (
-    <div className="max-w-5xl mx-auto space-y-7">
-      {/* Header Banner */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-700 text-white shadow-lg shadow-indigo-700/10">
+    <div className="max-w-5xl mx-auto space-y-7 page-enter">
+      {/* Header Banner - Dark Ink Editorial Hero */}
+      <div className="p-6 sm:p-8 rounded-2xl bg-ink text-paper shadow-sm border border-ink/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-indigo-100 text-xs font-semibold mb-2.5 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-mint/15 text-mint text-xs font-medium mb-2.5 backdrop-blur-sm border border-mint/20">
               <UserCheck className="w-4 h-4" />
-              <span>Direct Review Portal</span>
+              <span>Faculty Evaluation Portal</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Direct Student ID Review
+            <h1 className="text-2xl sm:text-3xl font-display text-white">
+              Individual Student Academic Review
             </h1>
-            <p className="text-xs sm:text-sm text-indigo-100/90 mt-1.5 max-w-2xl leading-relaxed">
-              Authorized faculty and administrators can review specific student academic records, longitudinal performance telemetry, and machine learning risk evaluations by entering a numeric student ID.
+            <p className="text-xs sm:text-sm text-paper/80 mt-1.5 max-w-2xl leading-relaxed">
+              Review verified assessment scores, student study habits, machine learning risk factors, and recommended interventions. Record new assessment marks to trigger live risk recalculation.
             </p>
           </div>
 
           <div className="p-3 bg-white/10 rounded-xl text-left sm:text-right backdrop-blur-sm border border-white/10 self-start sm:self-auto flex-shrink-0">
-            <p className="text-[11px] text-indigo-200 uppercase tracking-wider font-semibold">
-              Inspection Mode
+            <p className="text-xs text-paper/70 font-medium">
+              Evaluation mode
             </p>
-            <p className="text-sm font-bold text-white capitalize mt-0.5 flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-indigo-200" />
-              <span>Direct-ID Only</span>
+            <p className="text-sm font-semibold text-white capitalize mt-0.5 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-mint" />
+              <span>Assigned Review</span>
             </p>
           </div>
         </div>
       </div>
 
-      {/* Privacy Callout: Strict Absence of Directory */}
-      <div
-        role="note"
-        aria-label="Direct lookup privacy constraint"
-        className="p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-3 leading-relaxed"
-      >
-        <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <strong className="block font-semibold mb-0.5">
-            Privacy &amp; Direct-ID Boundary Constraint
-          </strong>
-          <span>
-            In strict compliance with institutional data governance, student directory enumeration and browseable student rosters are prohibited. Faculty members must provide the specific numeric Student ID for the individual student under review.
-          </span>
+      {/* Error Alert */}
+      {errorMessage && (
+        <div className="p-4 rounded-xl bg-coral/10 border border-coral/20 text-coral text-xs font-medium flex items-center gap-2.5 shadow-sm animate-in fade-in duration-200">
+          <AlertCircle className="w-4 h-4 text-coral flex-shrink-0" />
+          <span>{errorMessage}</span>
         </div>
-      </div>
+      )}
+
+      {/* Success Notification */}
+      {successToast && (
+        <div className="p-4 rounded-xl bg-softgreen border border-edugreen/30 text-edugreen text-xs font-medium flex items-center gap-2.5 shadow-sm animate-in fade-in duration-200">
+          <CheckCircle className="w-4 h-4 text-edugreen flex-shrink-0" />
+          <span>{successToast}</span>
+        </div>
+      )}
 
       {/* Search Input Form */}
       <section
         aria-labelledby="student-lookup-heading"
-        className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4"
+        className="p-6 rounded-2xl bg-white border border-ink/10 shadow-sm space-y-4"
       >
         <div>
-          <h2 id="student-lookup-heading" className="text-base font-bold text-slate-900 dark:text-white">
-            Lookup Student by ID
+          <h2 id="student-lookup-heading" className="text-lg font-display text-ink">
+            Lookup Student Profile
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Enter the student database integer ID assigned by institutional registry.
+          <p className="text-xs text-ink/60 mt-0.5">
+            Enter the student database integer ID to inspect records or record verified academic updates.
           </p>
         </div>
 
@@ -328,7 +328,7 @@ function StudentReviewContent() {
               <label htmlFor="student-id-input" className="sr-only">
                 Numeric Student ID
               </label>
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink/40">
                 <Search className="w-4 h-4" />
               </div>
               <input
@@ -342,18 +342,18 @@ function StudentReviewContent() {
                   setStudentIdInput(e.target.value);
                   if (validationError) setValidationError(null);
                 }}
-                placeholder="Enter Student ID (e.g. 1, 2, 7)..."
+                placeholder="Enter Student ID (e.g. 1, 2, 3, 4)..."
                 disabled={isLoading}
                 aria-invalid={validationError ? "true" : "false"}
                 aria-describedby={validationError ? "id-validation-error" : undefined}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition-all font-mono"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-ink/10 bg-paper text-ink placeholder-ink/40 text-sm focus:outline-none focus:ring-2 focus:ring-edugreen/20 focus:border-edugreen transition-all font-mono"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 flex-shrink-0"
+              className="py-2.5 px-6 rounded-xl bg-edugreen hover:bg-edugreen-dark active:scale-[0.99] text-white text-xs font-semibold shadow-sm transition-all duration-200 disabled:opacity-50 inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-edugreen flex-shrink-0 btn-interactive"
             >
               {isLoading ? (
                 <>
@@ -370,7 +370,7 @@ function StudentReviewContent() {
           </div>
 
           {validationError && (
-            <p id="id-validation-error" className="text-xs font-medium text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+            <p id="id-validation-error" className="text-xs font-medium text-coral flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{validationError}</span>
             </p>
@@ -380,75 +380,41 @@ function StudentReviewContent() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="p-16 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center flex flex-col items-center justify-center space-y-3">
-          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-            Querying student profile and longitudinal records from PostgreSQL...
+        <div className="p-16 rounded-2xl bg-white border border-ink/10 text-center flex flex-col items-center justify-center space-y-3">
+          <Loader2 className="w-8 h-8 text-edugreen animate-spin" />
+          <p className="text-sm font-semibold text-ink/70">
+            Querying student profile and academic records from PostgreSQL...
           </p>
         </div>
       )}
 
-      {/* Initial Guidance State (No search performed yet) */}
+      {/* Initial Guidance State */}
       {!hasSearched && !isLoading && (
-        <div className="p-12 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mb-1">
+        <div className="p-12 rounded-2xl bg-white border border-ink/10 shadow-sm text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-softgreen text-edugreen mb-1">
             <UserCheck className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            Awaiting Student ID Input
+          <h2 className="text-xl font-bold text-ink">
+            Awaiting Student Selection
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-            Enter a student database numeric ID in the input box above and click &quot;Review Student&quot; to inspect demographic metadata, longitudinal telemetry, and model risk forecasts.
+          <p className="text-xs sm:text-sm text-ink/60 max-w-md mx-auto leading-relaxed">
+            Enter a student ID in the box above or select a student from your Faculty Cohort Directory to review academic progress, SHAP explanations, and record official marks.
           </p>
-          <div className="pt-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-mono text-slate-500">
-              <Lock className="w-3 h-3" />
-              Student enumeration is disabled
-            </span>
-          </div>
         </div>
       )}
 
-      {/* Student Not Found State (404) */}
+      {/* Student Not Found State */}
       {notFoundId !== null && !isLoading && (
-        <div className="p-10 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-center space-y-3 shadow-sm">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 mb-1">
+        <div className="p-10 rounded-2xl bg-paper border border-ink/10 text-center space-y-3 shadow-sm">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-ink/5 text-ink/50 mb-1">
             <UserX className="w-6 h-6" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Student Not Found (ID: {notFoundId})
+          <h2 className="text-lg font-bold text-ink">
+            Student Record Not Found (ID: {notFoundId})
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
-            No institutional student record was found in PostgreSQL corresponding to ID <strong className="font-mono">{notFoundId}</strong>. Please check the numeric ID with institutional administration.
+          <p className="text-xs text-ink/60 max-w-md mx-auto leading-relaxed">
+            No student was found in PostgreSQL corresponding to ID <strong className="font-mono text-ink">{notFoundId}</strong>.
           </p>
-          <p className="text-[11px] text-slate-400">
-            For data security and privacy reasons, lists of valid student IDs are not displayed.
-          </p>
-        </div>
-      )}
-
-      {/* General Error State */}
-      {errorMessage && !isLoading && (
-        <div className="p-8 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 mb-1">
-            <AlertCircle className="w-5 h-5" />
-          </div>
-          <h2 className="text-base font-bold text-rose-900 dark:text-rose-200">
-            Review Request Failed
-          </h2>
-          <p className="text-xs text-rose-700 dark:text-rose-300 max-w-md mx-auto">
-            {errorMessage}
-          </p>
-          {activeStudentId && (
-            <button
-              type="button"
-              onClick={() => executeLookup(activeStudentId)}
-              className="mt-2 py-2 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition-all inline-flex items-center gap-2"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry Request</span>
-            </button>
-          )}
         </div>
       )}
 
@@ -462,7 +428,18 @@ function StudentReviewContent() {
             totalPredictions={history.total_predictions}
           />
 
-          {/* Section 2: Risk Evaluation & Gauge (if evaluated) */}
+          {/* Section 2: Academic Performance Summary with Faculty Data Entry Form */}
+          <StudentAcademicReviewSummary
+            studentId={student.id}
+            studentCode={student.student_code}
+            studentName={student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim()}
+            history={history}
+            onEvaluate={handleEvaluateTelemetry}
+            isEvaluating={isEvaluating}
+            onAcademicUpdateSuccess={handleAcademicUpdateSuccess}
+          />
+
+          {/* Section 3: Risk Evaluation & Gauge (if evaluated) */}
           {latestPrediction && (
             <RiskGaugeCard
               prediction={latestPrediction}
@@ -472,7 +449,7 @@ function StudentReviewContent() {
             />
           )}
 
-          {/* Section 3: SHAP Feature Attribution (if prediction exists) */}
+          {/* Section 4: SHAP Feature Attribution */}
           {latestPrediction && (
             <ExplainabilityView
               factors={factors}
@@ -482,12 +459,40 @@ function StudentReviewContent() {
             />
           )}
 
-          {/* Section 4: Academic Telemetry & History Breakdown */}
-          <StudentAcademicReviewSummary
-            history={history}
-            onEvaluate={handleEvaluateTelemetry}
-            isEvaluating={isEvaluating}
-          />
+          {/* Section 5: Institutional Recommendations */}
+          <div className="p-6 sm:p-7 rounded-2xl bg-white border border-ink/10 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-ink/5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber/15 text-amber-700 flex items-center justify-center font-bold">
+                  <Lightbulb className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-ink">
+                    Recommended Interventions ({recommendations.length})
+                  </h3>
+                  <p className="text-xs text-ink/60">
+                    Rule-based guidance evaluated from the student&apos;s latest academic indicators.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {recommendations.length === 0 ? (
+              <div className="p-4 rounded-xl bg-softgreen border border-edugreen/30 text-xs text-edugreen">
+                <span className="font-bold">Student is currently on track:</span> No urgent academic remediation or attendance interventions are triggered.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {recommendations.map((rec, idx) => (
+                  <RecommendationCard
+                    key={rec.id || `rec-${idx}`}
+                    recommendation={rec}
+                    index={idx}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -500,8 +505,8 @@ export default function FacultyStudentReviewPage() {
       <Suspense
         fallback={
           <div className="p-16 text-center flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            <p className="text-xs text-slate-400">Loading student review interface...</p>
+            <Loader2 className="w-8 h-8 text-edugreen animate-spin" />
+            <p className="text-xs text-ink/50">Loading student review interface...</p>
           </div>
         }
       >

@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser, login as apiLogin } from "@/lib/api/auth";
+import { getCurrentUser, login as apiLogin, logout as apiLogout } from "@/lib/api/auth";
 import {
   TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY,
@@ -21,7 +21,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (credentials: LoginRequest) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<User | null>;
 }
 
@@ -130,12 +130,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(USER_STORAGE_KEY);
-    setToken(null);
-    setUser(null);
-    router.push("/login");
+  const logout = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      // Ignore network errors or already revoked token
+    } finally {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+      setToken(null);
+      setUser(null);
+      router.push("/login");
+    }
   }, [router]);
 
   const refreshUser = useCallback(async (): Promise<User | null> => {

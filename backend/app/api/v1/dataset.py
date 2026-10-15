@@ -17,6 +17,7 @@ from backend.app.models.student import Student
 from backend.app.models.user import User
 from backend.app.schemas.academic_data import AcademicRecordCreate
 from backend.app.schemas.dataset import DatasetUploadResponse
+from backend.app.services.audit_service import log_audit_event
 from backend.app.services.ml_service import ml_service
 
 logger = logging.getLogger("eduguard.dataset")
@@ -395,6 +396,15 @@ async def upload_dataset(
                 predictions_created += 1
 
             risk_summary = risk_counts
+
+        # Log audit event for dataset upload
+        log_audit_event(
+            db=db,
+            actor_user_id=current_user.id,
+            action="dataset_upload",
+            target=f"filename={safe_filename}",
+            details=f"Ingested {records_created} records across {students_created} new student profiles (run_predictions={run_predictions})",
+        )
 
         db.commit()
     except Exception as db_err:

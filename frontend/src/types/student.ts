@@ -26,6 +26,7 @@ export interface PredictionHistoryItem {
   at_risk_binary: number;
   model_version: string;
   created_at: string;
+  top_factors?: FactorContribution[];
 }
 
 export interface AcademicRecordHistoryItem {
@@ -33,26 +34,29 @@ export interface AcademicRecordHistoryItem {
   student_id: number;
   recorded_at: string;
   term: string;
-  current_semester: number;
+  data_source?: "faculty_verified" | "self_reported" | string | null;
+  subject?: string | null;
+  assessment_name?: string | null;
+  current_semester?: number;
   G1: number | null;
   G2: number | null;
   absences: number;
   studytime: number;
   failures: number;
-  schoolsup: boolean;
-  famsup: boolean;
-  paid: boolean;
-  activities: boolean;
-  higher: boolean;
-  internet: boolean;
+  schoolsup: boolean | string;
+  famsup: boolean | string;
+  paid: boolean | string;
+  activities: boolean | string;
+  higher: boolean | string;
+  internet: boolean | string;
   freetime: number;
   goout: number;
   Dalc: number;
   Walc: number;
   health: number;
-  medu: number;
-  fedu: number;
-  traveltime: number;
+  medu?: number;
+  fedu?: number;
+  traveltime?: number;
   predictions: PredictionHistoryItem[];
 }
 
@@ -98,3 +102,31 @@ export interface PredictResponse {
   top_factors: FactorContribution[];
   causal_disclaimer: string;
 }
+
+export interface StudentSelfReportUpdatePayload {
+  studytime: number;
+  freetime?: number;
+  schoolsup?: "yes" | "no";
+  famsup?: "yes" | "no";
+  paid?: "yes" | "no";
+  activities?: "yes" | "no";
+  recalculate_risk?: boolean;
+}
+
+export interface FacultyAcademicUpdatePayload {
+  subject: string;
+  assessment_name: string;
+  marks: number;
+  max_marks: number;
+  absences: number;
+  term?: string;
+  recalculate_risk?: boolean;
+}
+
+export interface AcademicUpdateResponse {
+  student_id: number;
+  academic_record: AcademicRecordHistoryItem;
+  prediction?: PredictResponse | null;
+  message: string;
+}
+

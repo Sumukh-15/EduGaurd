@@ -36,6 +36,8 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
     if (!allowedRoles.includes(user.role)) {
       if (user.role === "student") {
         router.replace("/dashboard/student");
+      } else if (user.role === "admin") {
+        router.replace("/dashboard/admin");
       } else {
         router.replace("/dashboard/faculty");
       }
@@ -46,8 +48,8 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   if (isLoading) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-9 h-9 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+        <div className="w-9 h-9 border-3 border-edugreen border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-medium text-ink/65">
           Verifying security credentials...
         </p>
       </div>
@@ -63,13 +65,13 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   if (!allowedRoles.includes(user.role)) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mb-3">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-amber/15 text-amber-600 mb-3 border border-amber/30">
           <ShieldAlert className="w-6 h-6" />
         </div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+        <h2 className="text-lg font-display text-ink">
           Access Restricted
         </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+        <p className="text-xs text-ink/65 mt-1 max-w-sm">
           Your account role ({user.role}) does not have permission to view this section. Redirecting to your portal...
         </p>
       </div>

@@ -1,12 +1,14 @@
 """Authentication endpoints for login and user profile inspection."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.app.api.deps import get_current_user
+from backend.app.api.deps import get_current_user, oauth2_scheme
 from backend.app.core.config import settings
-from backend.app.core.security import create_access_token, verify_password
+from backend.app.core.security import create_access_token, decode_access_token, verify_password
 from backend.app.db.session import get_db
+from backend.app.models.revoked_token import RevokedToken
 from backend.app.models.user import User
 from backend.app.schemas.auth import LoginRequest, TokenResponse, UserRead
 
@@ -31,17 +33,11 @@ def login(
     """
     user = db.query(User).filter(User.email == credentials.email.lower().strip()).first()
 
-    if user is None or not verify_password(credentials.password, user.hashed_password):
+    if user is None or not verify_password(credentials.password, user.hashed_password) or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user account",
         )
 
     token = create_access_token(
@@ -80,3 +76,39 @@ def get_current_user_profile(
         student_id=student_id,
         student_code=student_code,
     )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Log Out User",
+    description="Revokes the current JWT access token by recording its unique identifier (jti) in the denylist table.",
+)
+def logout(
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Revoke the current session's JWT token by adding its jti to the denylist table."""
+    try:
+        payload = decode_access_token(token)
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+    except Exception:
+        jti = None
+        exp = None
+
+    if jti:
+        existing = db.query(RevokedToken).filter(RevokedToken.jti == jti).first()
+        if not existing:
+            expires_at = datetime.fromtimestamp(exp, tz=timezone.utc) if exp else datetime.now(timezone.utc)
+            revoked_entry = RevokedToken(
+                jti=jti,
+                user_id=current_user.id,
+                expires_at=expires_at,
+            )
+            db.add(revoked_entry)
+            db.commit()
+
+    return {"message": "Successfully logged out"}
+

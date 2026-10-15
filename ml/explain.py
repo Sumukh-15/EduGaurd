@@ -133,7 +133,11 @@ class EduGuardExplainer:
         if trained_pipeline is None or background_data is None:
             train_path = Path(train_split_path)
             if not train_path.exists():
-                raise FileNotFoundError(f"Training data file missing at: {train_path.resolve()}")
+                alt_path = Path(__file__).resolve().parent.parent / train_split_path
+                if alt_path.exists():
+                    train_path = alt_path
+                else:
+                    raise FileNotFoundError(f"Training data file missing at: {train_path.resolve()}")
             train_df = pd.read_csv(train_path)
             X_train = train_df.drop(columns=["at_risk"])
             background_data = X_train

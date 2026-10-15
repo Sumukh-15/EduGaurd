@@ -80,6 +80,11 @@ class Settings(BaseSettings):
         return v
 
     @property
+    def PROJECT_ROOT(self) -> Path:
+        """Project root directory."""
+        return PROJECT_ROOT
+
+    @property
     def is_production(self) -> bool:
         """Check if environment is production."""
         return self.ENVIRONMENT.lower() == "production"

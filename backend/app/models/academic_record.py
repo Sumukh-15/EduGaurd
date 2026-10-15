@@ -1,7 +1,7 @@
 """SQLAlchemy model for student academic records and telemetry."""
 
 from datetime import datetime, timezone
-from typing import Dict, List, TYPE_CHECKING, Any
+from typing import Dict, List, Optional, TYPE_CHECKING, Any
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,13 @@ class AcademicRecord(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    data_source: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        default="faculty_verified",
+    )  # "faculty_verified" or "self_reported"
+    subject: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    assessment_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # 15 Numerical features
     age: Mapped[int] = mapped_column(Integer, nullable=False)

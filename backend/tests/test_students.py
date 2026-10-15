@@ -469,3 +469,164 @@ def test_create_academic_record_student_not_found(test_client: TestClient, facul
         headers=headers,
     )
     assert resp.status_code == 404
+
+
+def test_student_self_reported_update_workflow(test_client: TestClient, student_fixture_a, faculty_fixture):
+    """Student can update self-reported study habits; verified grades are preserved and ML recalculates."""
+    student_id = student_fixture_a["student"].id
+    student_headers = student_fixture_a["headers"]
+    faculty_headers = faculty_fixture["headers"]
+
+    # First seed an initial verified academic record by faculty
+    initial_payload = dict(SAMPLE_32_FEATURE_PAYLOAD)
+    initial_payload["G1"] = 12.0
+    initial_payload["G2"] = 14.0
+    initial_payload["absences"] = 3
+    initial_payload["studytime"] = 2
+    r_init = test_client.post(
+        f"/api/students/{student_id}/academic-data",
+        json=initial_payload,
+        headers=faculty_headers,
+    )
+    assert r_init.status_code == 201
+
+    # Now student updates self-reported habits
+    self_report_payload = {
+        "studytime": 4,
+        "famsup": "yes",
+        "schoolsup": "no",
+        "paid": "yes",
+        "activities": "yes",
+        "recalculate_risk": True,
+    }
+    resp = test_client.post(
+        f"/api/students/{student_id}/self-reported",
+        json=self_report_payload,
+        headers=student_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["academic_record"]["data_source"] == "self_reported"
+    assert data["academic_record"]["studytime"] == 4
+    # Faculty verified grades are preserved
+    assert data["academic_record"]["G1"] == 12.0
+    assert data["academic_record"]["G2"] == 14.0
+    assert data["academic_record"]["absences"] == 3
+    # ML model ran and returned real probability & risk level
+    assert "prediction" in data
+    assert "risk_probability" in data["prediction"]
+    assert 0.0 <= data["prediction"]["risk_probability"] <= 1.0
+    assert data["prediction"]["risk_level"].upper() in ["LOW", "MEDIUM", "HIGH"]
+    assert len(data["prediction"]["top_factors"]) > 0
+
+
+def test_student_cannot_update_other_student_self_reported(test_client: TestClient, student_fixture_a, student_fixture_b):
+    """Student A cannot submit self-reported data for Student B."""
+    student_b_id = student_fixture_b["student"].id
+    headers_a = student_fixture_a["headers"]
+
+    resp = test_client.post(
+        f"/api/students/{student_b_id}/self-reported",
+        json={"studytime": 3},
+        headers=headers_a,
+    )
+    assert resp.status_code == 403
+
+
+def test_faculty_academic_update_workflow(test_client: TestClient, student_fixture_a, faculty_fixture):
+    """Faculty submits official assessment marks; validated, scaled to 0-20, and triggers live ML + SHAP."""
+    student_id = student_fixture_a["student"].id
+    faculty_headers = faculty_fixture["headers"]
+
+    # First ensure a baseline record exists
+    test_client.post(
+        f"/api/students/{student_id}/academic-data",
+        json=SAMPLE_32_FEATURE_PAYLOAD,
+        headers=faculty_headers,
+    )
+
+    # Faculty submits assessment: 85 / 100 marks -> scales to 17.0/20
+    faculty_payload = {
+        "subject": "Mathematics",
+        "assessment_name": "Midterm Examination",
+        "marks": 85.0,
+        "max_marks": 100.0,
+        "absences": 4,
+        "term": "Term 2",
+        "recalculate_risk": True,
+    }
+    resp = test_client.post(
+        f"/api/students/{student_id}/faculty-update",
+        json=faculty_payload,
+        headers=faculty_headers,
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["academic_record"]["data_source"] == "faculty_verified"
+    assert data["academic_record"]["subject"] == "Mathematics"
+    assert data["academic_record"]["assessment_name"] == "Midterm Examination"
+    # Marks scaled to 20: 85/100 * 20 = 17.0
+    assert data["academic_record"]["G2"] == 17.0
+    # G1 was the previous G2 (14.0 from SAMPLE_32_FEATURE_PAYLOAD)
+    assert data["academic_record"]["G1"] == 14.0
+    # Live ML prediction occurred
+    assert data["prediction"]["risk_level"].upper() in ["LOW", "MEDIUM", "HIGH"]
+    assert 0.0 <= data["prediction"]["risk_probability"] <= 1.0
+    assert len(data["prediction"]["top_factors"]) > 0
+
+
+def test_faculty_academic_update_validation(test_client: TestClient, student_fixture_a, faculty_fixture):
+    """Marks exceeding max_marks or invalid ranges are rejected with 422."""
+    student_id = student_fixture_a["student"].id
+    faculty_headers = faculty_fixture["headers"]
+
+    # marks > max_marks
+    invalid_payload = {
+        "subject": "Math",
+        "assessment_name": "Quiz 1",
+        "marks": 110.0,
+        "max_marks": 100.0,
+        "absences": 2,
+    }
+    resp = test_client.post(
+        f"/api/students/{student_id}/faculty-update",
+        json=invalid_payload,
+        headers=faculty_headers,
+    )
+    assert resp.status_code == 422
+
+    # Negative absences
+    invalid_att = {
+        "subject": "Math",
+        "assessment_name": "Quiz 1",
+        "marks": 80.0,
+        "max_marks": 100.0,
+        "absences": -5,
+    }
+    resp = test_client.post(
+        f"/api/students/{student_id}/faculty-update",
+        json=invalid_att,
+        headers=faculty_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_student_cannot_call_faculty_update(test_client: TestClient, student_fixture_a):
+    """Students cannot access the faculty-update endpoint."""
+    student_id = student_fixture_a["student"].id
+    student_headers = student_fixture_a["headers"]
+
+    payload = {
+        "subject": "Math",
+        "assessment_name": "Self Grade",
+        "marks": 20.0,
+        "max_marks": 20.0,
+        "absences": 0,
+    }
+    resp = test_client.post(
+        f"/api/students/{student_id}/faculty-update",
+        json=payload,
+        headers=student_headers,
+    )
+    assert resp.status_code == 403
+

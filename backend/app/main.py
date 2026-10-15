@@ -4,6 +4,14 @@ Provides application lifecycle management, CORS configuration,
 global middleware, and the /api/health monitoring endpoint.
 """
 
+import sys
+from pathlib import Path
+
+# Ensure repository root is on sys.path if launched from within backend/ directory
+_repo_root = str(Path(__file__).resolve().parent.parent.parent)
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 from contextlib import asynccontextmanager
 import logging
 from typing import AsyncGenerator
@@ -31,6 +39,17 @@ def check_model_availability() -> bool:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager to verify resources on startup."""
     logger.info("Starting up %s (v%s, env=%s)...", settings.PROJECT_NAME, settings.VERSION, settings.ENVIRONMENT)
+
+    # Initialize database tables in non-testing environments
+    if settings.ENVIRONMENT != "testing":
+        try:
+            from backend.app.db.base import Base
+            from backend.app.db.session import engine
+            import backend.app.models  # ensure all models registered
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database schemas verified.")
+        except Exception as e:
+            logger.warning("Database schema verification skipped: %s", e)
 
     # Check ML artifact availability and initialize MLService
     from backend.app.services import ml_service

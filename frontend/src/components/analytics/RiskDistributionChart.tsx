@@ -30,9 +30,9 @@ interface RiskDistributionChartProps {
 }
 
 const TIER_COLORS = {
-  Low: "#10b981",    // Emerald-500
-  Medium: "#f59e0b", // Amber-500
-  High: "#e11d48",   // Rose-600
+  Low: "#27AC1F",    // EduGuard Green
+  Medium: "#F4B740", // Amber
+  High: "#E85D5D",   // Coral
 };
 
 export default function RiskDistributionChart({
@@ -44,6 +44,7 @@ export default function RiskDistributionChart({
   const [chartMode, setChartMode] = useState<"donut" | "bar">("donut");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -60,30 +61,30 @@ export default function RiskDistributionChart({
   return (
     <section
       aria-labelledby="risk-distribution-heading"
-      className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6"
+      className="p-6 sm:p-7 rounded-2xl bg-white border border-ink/10 shadow-xs space-y-6"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+          <span className="text-xs font-medium text-ink-muted block">
             Population Stratification
           </span>
-          <h2 id="risk-distribution-heading" className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">
+          <h2 id="risk-distribution-heading" className="text-xl sm:text-2xl font-display font-normal text-ink mt-0.5">
             Risk Triage Distribution
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
+          <p className="text-xs text-ink/65 mt-1 max-w-xl leading-relaxed">
             Cohort categorization into operational triage tiers using Phase 1 Logistic Regression probability thresholds.
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div className="inline-flex items-center bg-paper p-1 rounded-xl border border-ink/10">
             <button
               type="button"
               onClick={() => setChartMode("donut")}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+              className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 chartMode === "donut"
-                  ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  ? "bg-ink text-white shadow-xs"
+                  : "text-ink/60 hover:text-ink"
               }`}
               title="Donut Chart View"
             >
@@ -93,10 +94,10 @@ export default function RiskDistributionChart({
             <button
               type="button"
               onClick={() => setChartMode("bar")}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+              className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 chartMode === "bar"
-                  ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                  ? "bg-ink text-white shadow-xs"
+                  : "text-ink/60 hover:text-ink"
               }`}
               title="Bar Chart View"
             >
@@ -105,7 +106,7 @@ export default function RiskDistributionChart({
             </button>
           </div>
 
-          <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-softgreen text-edugreen-dark border border-edugreen/30">
             {evaluatedCount} Evaluated
           </span>
         </div>
@@ -136,9 +137,9 @@ export default function RiskDistributionChart({
                     props?.payload?.name ?? "Count",
                   ]}
                   contentStyle={{
-                    backgroundColor: "rgba(15, 23, 42, 0.92)",
+                    backgroundColor: "rgba(18, 24, 30, 0.95)",
                     borderRadius: "0.75rem",
-                    border: "none",
+                    border: "1px solid rgba(255,255,255,0.1)",
                     color: "#fff",
                     fontSize: "0.75rem",
                   }}
@@ -159,9 +160,9 @@ export default function RiskDistributionChart({
                     "Count",
                   ]}
                   contentStyle={{
-                    backgroundColor: "rgba(15, 23, 42, 0.92)",
+                    backgroundColor: "rgba(18, 24, 30, 0.95)",
                     borderRadius: "0.75rem",
-                    border: "none",
+                    border: "1px solid rgba(255,255,255,0.1)",
                     color: "#fff",
                     fontSize: "0.75rem",
                   }}
@@ -176,7 +177,7 @@ export default function RiskDistributionChart({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="h-32 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-center text-xs text-slate-500">
+        <div className="h-32 rounded-xl bg-paper border border-ink/10 flex items-center justify-center text-xs text-ink/60">
           No student evaluations recorded yet.
         </div>
       )}
@@ -184,83 +185,83 @@ export default function RiskDistributionChart({
       {/* Triage Tier Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Low Tier Card */}
-        <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/50">
+        <div className="p-4 rounded-xl bg-softgreen/60 border border-edugreen/30 hover:border-edugreen/50 hover:shadow-xs transition-all duration-200">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-              <CheckCircle className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-edugreen-dark">
+              <CheckCircle className="w-4 h-4 text-edugreen" />
               <span>Low Risk Tier</span>
             </div>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-edugreen text-white">
               &lt; 40%
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-emerald-900 dark:text-emerald-100">
+            <span className="text-2xl font-sans font-bold tabular-nums text-ink">
               {distribution.low}
             </span>
-            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="text-xs font-semibold text-edugreen-dark">
               ({lowPct}%)
             </span>
           </div>
-          <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 mt-1">
+          <p className="text-[11px] text-ink/75 mt-1">
             Satisfactory course trajectory with minimal early-warning indicators.
           </p>
         </div>
 
         {/* Medium Tier Card */}
-        <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50">
+        <div className="p-4 rounded-xl bg-amber/15 border border-amber/30 hover:border-amber/50 hover:shadow-xs transition-all duration-200">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
-              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-700" />
               <span>Medium Risk Tier</span>
             </div>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500 text-white">
               40% - 69%
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+            <span className="text-2xl font-sans font-bold tabular-nums text-ink">
               {distribution.medium}
             </span>
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+            <span className="text-xs font-semibold text-amber-900">
               ({medPct}%)
             </span>
           </div>
-          <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-1">
+          <p className="text-[11px] text-ink/75 mt-1">
             Emerging academic friction; recommended for targeted check-ins.
           </p>
         </div>
 
         {/* High Tier Card */}
-        <div className="p-4 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50">
+        <div className="p-4 rounded-xl bg-coral/15 border border-coral/30 hover:border-coral/50 hover:shadow-xs transition-all duration-200">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 dark:text-rose-300">
-              <ShieldAlert className="w-4 h-4 text-rose-600" />
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-coral">
+              <ShieldAlert className="w-4 h-4 text-coral" />
               <span>High Risk Tier</span>
             </div>
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral text-white">
               &ge; 70%
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-rose-900 dark:text-rose-100">
+            <span className="text-2xl font-sans font-bold tabular-nums text-ink">
               {distribution.high}
             </span>
-            <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+            <span className="text-xs font-semibold text-coral">
               ({highPct}%)
             </span>
           </div>
-          <p className="text-[11px] text-rose-700/80 dark:text-rose-400 mt-1">
+          <p className="text-[11px] text-ink/75 mt-1">
             Urgent risk of course distress; requires faculty intervention.
           </p>
         </div>
       </div>
 
       {/* Threshold Context Note */}
-      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-start gap-2.5 text-xs text-slate-500 dark:text-slate-400">
-        <Info className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+      <div className="p-3.5 rounded-xl bg-paper border border-ink/10 flex items-start gap-2.5 text-xs text-ink/75">
+        <Info className="w-4 h-4 text-edugreen flex-shrink-0 mt-0.5" />
         <span>
-          <strong>Binary Classification Threshold:</strong> Students with risk probability &ge; 0.50 are formally flagged as at-risk in the backend classification ledger.
+          <strong className="text-ink">Binary Classification Threshold:</strong> Students with risk probability &ge; 0.50 are formally flagged as at-risk in the backend classification ledger.
         </span>
       </div>
     </section>

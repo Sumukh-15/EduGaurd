@@ -1,5 +1,6 @@
 """Security and cryptography utilities: password hashing and JWT token handling."""
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from jose import jwt, JWTError
@@ -56,6 +57,7 @@ def create_access_token(
         "sub": str(subject),
         "role": role,
         "exp": expire,
+        "jti": uuid.uuid4().hex,
     }
     if extra_claims:
         to_encode.update(extra_claims)

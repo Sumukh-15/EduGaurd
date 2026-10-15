@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from backend.app.schemas.academic_data import AcademicRecordCreate
+from backend.app.schemas.academic_data import AcademicRecordCreate, AcademicRecordRead
 
 
 class PredictRequest(BaseModel):
@@ -119,4 +119,16 @@ class BatchPredictResponse(BaseModel):
     results: List[BatchPredictItem] = Field(..., description="Per-student outcome list")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AcademicUpdateResponse(BaseModel):
+    """Response returned after recording a self-reported or faculty-verified academic update."""
+
+    student_id: int = Field(..., description="Target student ID")
+    academic_record: AcademicRecordRead = Field(..., description="Newly persisted academic record")
+    prediction: Optional[PredictResponse] = Field(None, description="Newly evaluated risk prediction, if requested")
+    message: str = Field(..., description="User-friendly status message describing the update")
+
+    model_config = ConfigDict(from_attributes=True)
+
 

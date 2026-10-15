@@ -1,0 +1,140 @@
+<USER_REQUEST>
+HOW WE WILL WORK TOGETHER (read this first — it overrides your default behavior)
+
+You are not allowed to silently build the whole project in one shot. I want to stay involved and understand every change before it happens. Follow this protocol for every phase listed below, no exceptions:
+
+
+
+Plan before you build. At the start of each phase, write a short plan to docs/plan-phaseN.md covering:
+What you're about to build and why (plain English, no jargon dump)
+Exact list of files you will create or modify
+Any tools, libraries, accounts, or installs I need to set up on my machine before you can proceed — give exact commands (e.g. brew install postgresql@16, nvm install 20) and a one-line reason for each
+Any assumptions or decisions you're making that I haven't explicitly told you (e.g. which risk thresholds, which model to try first)
+Then STOP and wait for me to reply "approved" or with changes. Do not write implementation code before I approve the plan.
+Requirements first, always. Before Phase 1 begins, generate a root REQUIREMENTS.md listing every piece of software, CLI tool, account, and environment variable needed for the entire project (Node version, Python version, Docker, PostgreSQL, Git, any API keys). Give install commands per OS where relevant. Wait for me to confirm I've installed everything before continuing.
+Implement in small, reviewable chunks. Don't dump an entire phase's code in one giant commit. Break each phase into the sub-steps already listed below and pause between sub-steps if a sub-step touches more than ~5 files.
+Explain what changed, after every implementation step. After writing code, give me a short changelog in plain English: what was added/changed, why, which files, and what I should test or look at to verify it worked. Then wait for me to say "accept" before moving to the next sub-step.
+Never install or run anything destructive without asking. No git push --force, no dropping/recreating a database, no deleting files outside the current working folder, without asking first and explaining why.
+Keep it simple. Minimum viable implementation at every step. No extra abstraction layers, no extra microservices, no libraries beyond what's specified below, unless you ask me first and explain the tradeoff. If two approaches are possible, briefly present both and ask which I prefer rather than silently picking one.
+If anything is ambiguous, ask me — do not guess and proceed. A clarifying question is always cheaper than rework.
+After each phase's acceptance check passes, update PROGRESS.md with what's done, what's deferred, and open questions, then stop and wait for me to say "go to next phase."
+
+This is a deliberately slow, checkpoint-driven build. That is the point — I'd rather it take longer and go smoothly than move fast and end up somewhere I don't understand or can't fix.
+
+MISSION
+
+Build EduGuard — Explainable AI-Based Early Warning System for Student Academic Risk, from an empty repository to a production-ready, deployable application, using the protocol above at every step.
+
+
+I've added student-mat.csv and student-por.csv to data/raw/. Use student-mat.csv as the primary dataset for MVP (Option A). Mention student-por.csv as a documented option for later extension, don't merge them for now.
+PROJECT SUMMARY
+Core AI task: Supervised binary classification — predict whether a student is "At Risk" (1) or "Not At Risk" (0), using only data available up to a defined prediction point (no leakage from final/later results).
+Differentiator: Every prediction ships with a SHAP-based explanation, not just a label.
+Stack:
+Frontend: Next.js (React, TypeScript), Tailwind CSS, Recharts
+Backend: FastAPI (Python), Pydantic v2
+ML: Python, NumPy, Pandas, scikit-learn, XGBoost, SHAP
+Database: PostgreSQL (SQLAlchemy + Alembic migrations)
+Auth: JWT-based, role-based access (student / faculty / admin)
+Deployment target: frontend → Vercel; backend + DB → Render/Railway; Docker Compose for local dev
+NON-NEGOTIABLE PRINCIPLES
+No data leakage. Document the prediction point and prove no post-outcome fields leak into features.
+Explainability is core. Every /predict response includes SHAP per-feature contributions.
+Rule-based recommendations, not an LLM. Deterministic threshold logic only.
+Security basics are mandatory: hashed passwords, JWT auth, server-side role checks on every endpoint, Pydantic validation, ORM-only queries (no raw SQL string building).
+Binary classification for MVP (0 = Not At Risk, 1 = At Risk), with probability bucketed into Low (0–39%) / Medium (40–69%) / High (70–100%) — a single configurable constant, not hardcoded in multiple places.
+Honest metrics. Report real cross-validated Precision/Recall/F1/ROC-AUC/Accuracy. If they're mediocre, say so and explain why in MODEL_CARD.md.
+NON-GOALS
+No automatic promotion/pass-fail decisions
+No mental-health diagnosis
+No punitive/automated consequences for a flagged student
+No scraping — only the dataset provided in data/raw/
+No LLM-based chat tutor
+PHASE 0 — Requirements Doc + Dataset Understanding
+
+Do not touch application code in this phase.
+
+Generate REQUIREMENTS.md (see protocol step 2 above) and wait for my confirmation.
+I have placed a dataset CSV in data/raw/ — UCI's "Student Performance" dataset (fields include school, sex, age, studytime, failures, absences, G1, G2, G3, and other demographic/family fields). Load it, inspect it, and write data/DATASET.md covering:
+Row/column counts, data types, missing values
+How raw columns map to EduGuard's conceptual features: e.g. absences → attendance signal, G1/G2 → internal marks / quiz average proxies, studytime/failures → engagement signals
+The prediction point: define risk using G1 and G2 (and non-grade features) only; G3 is the outcome used solely to derive the label (e.g. at_risk = 1 if G3 < some pass threshold else 0) and must never be used as an input feature — call this out explicitly
+Resulting class balance for at_risk
+Present this plan and the resulting DATASET.md to me and wait for approval before Phase 1.
+PHASE 1 — ML Pipeline (standalone Python, ml/)
+
+Sub-steps (pause for my acceptance between each):
+
+ml/clean.py + ml/eda.py — cleaning + EDA (distributions, correlations, class balance) → ml/reports/eda/
+ml/features.py — feature engineering per DATASET.md
+ml/train.py — stratified train/test split; train Logistic Regression (baseline), Random Forest, XGBoost; cross-validate; log results to ml/reports/model_comparison.csv
+ml/select_model.py — pick best model by F1 + Recall priority; write ml/reports/MODEL_CARD.md with confusion matrix and justification
+ml/explain.py — SHAP explainer wrapper: explain(features: dict) -> list[{feature, contribution}]
+ml/serialize.py — persist model_v1.joblib + model_metadata.json (feature order, thresholds, training date, metrics)
+ml/tests/ — pytest: feature engineering, prediction shape/range, SHAP output shape, a test asserting G3 never appears in the training feature set
+
+Acceptance check: pytest ml/tests passes; MODEL_CARD.md has real numbers. Show me the confusion matrix and metrics before we proceed.
+
+PHASE 2 — Backend (FastAPI, backend/)
+
+Sub-steps:
+
+Project scaffold, Dockerfile, .env.example, Pydantic settings
+DB models + Alembic migration for: users, students, academic_records, predictions, explanations (fields as in the PRD schema)
+Auth: POST /api/auth/login (JWT), password hashing, role-guard dependency
+GET /api/students/{id}, GET/POST /api/students/{id}/academic-data
+POST /api/predict — loads Phase 1's serialized model, returns {risk_level, probability, factors[]}, persists to predictions/explanations
+GET /api/students/{id}/history, GET /api/faculty/students, GET /api/faculty/analytics
+POST /api/dataset/upload (CSV, faculty/admin only, validated, batch-scored)
+GET /api/recommendations/{student_id} — rule-based logic only
+backend/tests/ — auth, cross-student authorization boundaries, prediction shape, validation rejection, CSV upload happy/malformed paths
+
+Acceptance check: pytest backend/tests passes; /docs (Swagger) works; a real /api/predict call against the trained model returns a sane response. Show me a sample request/response before we proceed.
+
+PHASE 3 — Frontend (Next.js + TypeScript, frontend/)
+
+Sub-steps:
+
+Auth pages + route guards per role
+Student dashboard (overview cards, risk gauge, trend chart)
+Student risk/explanation page (SHAP bar chart) + recommendations
+Faculty dashboard (risk distribution, high-risk table) + student detail page
+Faculty analytics + CSV upload UI
+Typed API client kept in sync with backend schemas
+Component tests (Vitest/RTL) + one Playwright end-to-end flow: login → dashboard → check risk → view explanation
+
+Acceptance check: npm run build — zero type errors; npm test passes; live walk-through against the real backend reproduces a full risk explanation for a real student from the dataset. Show me screenshots before we proceed.
+
+PHASE 4 — Integration, Seeding, Demo Readiness
+Seed script loading a realistic subset of real students (not fabricated data) into Postgres for the demo
+docker-compose.yml running frontend + backend + Postgres with one command
+Full manual/Playwright walkthrough of the demo flow: login as faculty → class overview → select high-risk student → predict → SHAP explanation → recommendations → history → CSV upload → updated distribution
+Fix anything broken — show me the walkthrough results before we proceed
+PHASE 5 — Production Readiness
+GitHub Actions CI: backend tests, frontend build/tests, ML tests on every push
+All secrets via env vars only; .env.example per service; nothing committed
+Deployment configs (Dockerfiles, Render/Vercel config), migration-on-deploy step
+Structured logging; no stack traces leaked in prod responses
+Confirm /api/predict responds under 2 seconds locally
+README.md (setup, architecture, test/retrain/deploy instructions) + final PROGRESS.md with real metrics and honest limitations
+DELIVERABLES CHECKLIST
+ REQUIREMENTS.md confirmed installed by me
+ data/DATASET.md with locked feature/target/prediction-point definition
+ ml/reports/MODEL_CARD.md with real metrics + confusion matrix
+ Trained model + SHAP wired into the API
+ FastAPI backend: auth, RBAC, all endpoints, tests passing
+ PostgreSQL schema + migrations
+ Next.js frontend: student + faculty flows, tests passing
+ Docker Compose local run
+ CI green
+ README.md + PROGRESS.md + MODEL_CARD.md present and accurate
+ Full demo walkthrough works end-to-end
+
+Reminder: never skip the plan → approval → implement → changelog → acceptance loop, even if a step looks trivial to you.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-23T14:15:21+05:30.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

@@ -48,9 +48,9 @@ export default function DashboardLayout({
   // Session hydration loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-paper text-ink">
+        <div className="w-10 h-10 border-4 border-edugreen border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-semibold text-ink-muted">
           Loading EduGuard session...
         </p>
       </div>
@@ -63,7 +63,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex bg-paper text-ink">
       {/* Desktop Sidebar (Permanent) */}
       <div className="hidden lg:block lg:flex-shrink-0">
         <div className="h-screen sticky top-0">
@@ -87,7 +87,7 @@ export default function DashboardLayout({
           />
 
           {/* Drawer Content */}
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-slate-900 shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-10 animate-in slide-in-from-left duration-200">
             <Sidebar isMobile onClose={() => setIsMobileMenuOpen(false)} />
           </div>
         </div>

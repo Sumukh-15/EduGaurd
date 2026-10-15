@@ -84,19 +84,19 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
   return (
     <section
       aria-labelledby="trajectory-chart-heading"
-      className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5"
+      className="p-6 sm:p-7 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface space-y-5"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-ink/10">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+            <span className="text-xs font-semibold text-ink/50 uppercase tracking-wider block">
               Longitudinal Progression
             </span>
           </div>
-          <h2 id="trajectory-chart-heading" className="text-xl font-bold text-slate-900 dark:text-white mt-0.5">
+          <h2 id="trajectory-chart-heading" className="text-xl font-bold text-ink mt-0.5 tracking-tight">
             Academic Grade Trajectory
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
+          <p className="text-xs text-ink/60 mt-1 max-w-xl leading-relaxed">
             Historical evolution of Period 1 (G1) and Period 2 (G2) course marks across chronological evaluation periods (Grading Scale: 0 to 20).
           </p>
         </div>
@@ -106,10 +106,10 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
           <div
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold ${
               netVelocity > 0
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                ? "bg-softgreen text-edugreen border-edugreen/30"
                 : netVelocity < 0
-                ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
-                : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                ? "bg-coral/15 text-coral border-coral/30"
+                : "bg-paper text-ink border-ink/20"
             }`}
           >
             {netVelocity > 0 ? (
@@ -130,17 +130,17 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
       <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-indigo-500 inline-block" />
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Period 1 Grade (G1)</span>
+            <span className="w-3 h-3 rounded-full bg-ink inline-block" />
+            <span className="font-semibold text-ink/80">Period 1 Grade (G1)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Period 2 Midterm (G2)</span>
+            <span className="w-3 h-3 rounded-full bg-edugreen inline-block" />
+            <span className="font-semibold text-ink/80">Period 2 Midterm (G2)</span>
           </div>
         </div>
 
         {activePoint && (
-          <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg">
+          <div className="text-[11px] font-mono text-ink/75 bg-paper border border-ink/10 px-2.5 py-1 rounded-lg">
             Period: <strong>{activePoint.record.term || `Record #${activePoint.index + 1}`}</strong> • G1:{" "}
             <strong>{activePoint.g1Val}</strong> • G2: <strong>{activePoint.g2Val}</strong>
           </div>
@@ -166,7 +166,7 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                     y1={y}
                     x2={svgWidth - padRight}
                     y2={y}
-                    className="stroke-slate-200 dark:stroke-slate-800"
+                    stroke="rgba(18, 24, 30, 0.08)"
                     strokeWidth="1"
                     strokeDasharray={grade === 10 ? "4 4" : undefined}
                   />
@@ -174,7 +174,7 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                     x={padLeft - 8}
                     y={y + 3.5}
                     textAnchor="end"
-                    className="text-[10px] fill-slate-400 font-mono"
+                    className="text-[10px] fill-ink/40 font-mono"
                   >
                     {grade}
                   </text>
@@ -187,26 +187,26 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
               x={svgWidth - padRight}
               y={padTop + (1 - 10 / maxGrade) * plotHeight - 5}
               textAnchor="end"
-              className="text-[9px] fill-amber-500 font-semibold"
+              className="text-[9px] fill-amber font-semibold"
             >
               Passing Threshold (10/20)
             </text>
 
-            {/* Line G1 (Indigo) */}
+            {/* Line G1 (Ink) */}
             <path
               d={g1Path}
               fill="none"
-              stroke="#6366f1"
+              stroke="#12181E"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
 
-            {/* Line G2 (Emerald) */}
+            {/* Line G2 (EduGuard Green) */}
             <path
               d={g2Path}
               fill="none"
-              stroke="#10b981"
+              stroke="#27AC1F"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -232,7 +232,7 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                       y1={padTop}
                       x2={p.x}
                       y2={padTop + plotHeight}
-                      stroke="#818cf8"
+                      stroke="#27AC1F"
                       strokeWidth="1"
                       strokeDasharray="2 2"
                       opacity="0.6"
@@ -244,7 +244,7 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                     cx={p.x}
                     cy={p.y1}
                     r={isSelected ? 6 : 4}
-                    fill="#6366f1"
+                    fill="#12181E"
                     stroke="#ffffff"
                     strokeWidth="2"
                     className="transition-all duration-200"
@@ -255,7 +255,7 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                     cx={p.x}
                     cy={p.y2}
                     r={isSelected ? 6 : 4}
-                    fill="#10b981"
+                    fill="#27AC1F"
                     stroke="#ffffff"
                     strokeWidth="2"
                     className="transition-all duration-200"
@@ -268,8 +268,8 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
                     textAnchor="middle"
                     className={`text-[10px] font-mono transition-colors ${
                       isSelected
-                        ? "fill-indigo-600 dark:fill-indigo-400 font-bold"
-                        : "fill-slate-400"
+                        ? "fill-edugreen font-bold"
+                        : "fill-ink/40"
                     }`}
                   >
                     {p.record.term || `P${p.index + 1}`}
@@ -282,8 +282,8 @@ export default function AcademicTrajectoryChart({ records }: AcademicTrajectoryC
       </div>
 
       {/* Non-causal Visual Notice */}
-      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-start gap-2.5 text-xs text-slate-500 dark:text-slate-400">
-        <Info className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
+      <div className="p-3.5 rounded-xl bg-paper border border-ink/10 flex items-start gap-2.5 text-xs text-ink/70">
+        <Info className="w-4 h-4 text-edugreen flex-shrink-0 mt-0.5" />
         <span>
           <strong>Trajectory Context:</strong> Points represent historical evaluation marks recorded by faculty. Grade progression reflects historical performance and does not imply automated deterministic outcomes.
         </span>

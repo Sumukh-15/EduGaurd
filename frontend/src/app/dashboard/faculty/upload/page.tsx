@@ -208,28 +208,28 @@ export default function FacultyDatasetUploadPage() {
 
   return (
     <RoleGuard allowedRoles={["faculty", "admin"]}>
-      <div className="max-w-5xl mx-auto space-y-7">
-        {/* Header Banner */}
-        <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-700 text-white shadow-lg shadow-indigo-700/10">
+      <div className="max-w-5xl mx-auto space-y-7 page-enter">
+        {/* Header Banner - Dark Ink Editorial Hero */}
+        <div className="p-6 sm:p-8 rounded-2xl bg-ink text-paper shadow-sm border border-ink/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-indigo-100 text-xs font-semibold mb-2.5 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-mint/15 text-mint text-xs font-medium mb-2.5 backdrop-blur-sm border border-mint/20">
                 <UploadCloud className="w-4 h-4" />
                 <span>Dataset Management</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-display text-white">
                 Batch Telemetry Ingestion
               </h1>
-              <p className="text-xs sm:text-sm text-indigo-100/90 mt-1.5 max-w-2xl leading-relaxed">
+              <p className="text-xs sm:text-sm text-paper/80 mt-1.5 max-w-2xl leading-relaxed">
                 Upload institutional student performance CSV datasets to batch-record telemetry in PostgreSQL. Streamed pre-validation guarantees data integrity with atomic rollback.
               </p>
             </div>
 
             <div className="p-3 bg-white/10 rounded-xl text-left sm:text-right backdrop-blur-sm border border-white/10 self-start sm:self-auto flex-shrink-0">
-              <p className="text-[11px] text-indigo-200 uppercase tracking-wider font-semibold">
-                Target Endpoint
+              <p className="text-xs text-paper/70 font-medium">
+                Target endpoint
               </p>
-              <p className="text-sm font-bold text-white capitalize mt-0.5 font-mono">
+              <p className="text-sm font-semibold text-white capitalize mt-0.5 font-mono">
                 /api/dataset/upload
               </p>
             </div>
@@ -242,19 +242,19 @@ export default function FacultyDatasetUploadPage() {
           aria-label="Upload scope and prediction boundary"
           className={`p-4 rounded-xl border text-xs flex items-start gap-3 leading-relaxed transition-all ${
             runPredictions
-              ? "bg-purple-50/80 dark:bg-purple-950/40 border-purple-200/80 dark:border-purple-900/60 text-purple-900 dark:text-purple-200"
-              : "bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-200/80 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200"
+              ? "bg-softgreen border-edugreen/30 text-ink"
+              : "bg-paper border-ink/10 text-ink/80"
           }`}
         >
           <Shield
             className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
               runPredictions
-                ? "text-purple-600 dark:text-purple-400"
-                : "text-indigo-600 dark:text-indigo-400"
+                ? "text-edugreen"
+                : "text-ink/60"
             }`}
           />
           <div>
-            <strong className="block font-semibold mb-0.5">
+            <strong className="block font-semibold mb-0.5 text-ink">
               {runPredictions
                 ? "Opt-In Active: Batch Risk Inference & SHAP Enabled"
                 : "Scope Notice: Ingestion Only (Predictions Optional)"}
@@ -279,13 +279,13 @@ export default function FacultyDatasetUploadPage() {
         {!uploadResult && (
           <section
             aria-labelledby="upload-section-heading"
-            className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6"
+            className="p-6 sm:p-7 rounded-2xl bg-white border border-ink/10 shadow-sm space-y-6"
           >
             <div>
-              <h2 id="upload-section-heading" className="text-base font-bold text-slate-900 dark:text-white">
+              <h2 id="upload-section-heading" className="text-lg font-display text-ink">
                 Select CSV Telemetry File
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-ink/60 mt-0.5">
                 Drag and drop your formatted student telemetry CSV file below, or click to browse.
               </p>
             </div>
@@ -299,10 +299,10 @@ export default function FacultyDatasetUploadPage() {
                 onClick={() => fileInputRef.current?.click()}
                 className={`p-8 sm:p-10 rounded-2xl border-2 border-dashed transition-all text-center cursor-pointer flex flex-col items-center justify-center space-y-3 ${
                   isDragOver
-                    ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40"
+                    ? "border-edugreen bg-softgreen/40"
                     : selectedFile
-                    ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50/30 dark:bg-emerald-950/20"
-                    : "border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 bg-slate-50/50 dark:bg-slate-800/30"
+                    ? "border-edugreen/40 bg-softgreen/20"
+                    : "border-ink/15 hover:border-edugreen bg-paper/60"
                 }`}
               >
                 <input
@@ -319,8 +319,8 @@ export default function FacultyDatasetUploadPage() {
                 <div
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform ${
                     selectedFile
-                      ? "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400"
-                      : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400"
+                      ? "bg-softgreen text-edugreen"
+                      : "bg-paper text-ink/60"
                   }`}
                 >
                   {selectedFile ? (
@@ -333,22 +333,22 @@ export default function FacultyDatasetUploadPage() {
                 <div>
                   {selectedFile ? (
                     <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">
+                      <p className="text-sm font-bold text-ink">
                         {selectedFile.name}
                       </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      <p className="text-xs text-ink/60 mt-0.5">
                         {formatBytes(selectedFile.size)} • Ready for validation
                       </p>
                     </div>
                   ) : (
                     <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      <p className="text-sm font-bold text-ink">
                         Drop your telemetry CSV here, or{" "}
-                        <span className="text-indigo-600 dark:text-indigo-400 underline">
+                        <span className="text-edugreen underline font-semibold">
                           browse files
                         </span>
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="text-xs text-ink/40 mt-1">
                         Only standard .csv files up to 10 MB are accepted
                       </p>
                     </div>
@@ -360,9 +360,9 @@ export default function FacultyDatasetUploadPage() {
               {clientError && (
                 <div
                   role="alert"
-                  className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3"
+                  className="p-4 rounded-xl bg-coral/10 border border-coral/20 text-xs text-coral flex items-start gap-3"
                 >
-                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 text-coral flex-shrink-0 mt-0.5" />
                   <div>
                     <strong className="block font-semibold">Invalid File Selection</strong>
                     <span>{clientError}</span>
@@ -374,11 +374,11 @@ export default function FacultyDatasetUploadPage() {
               {csvPreview?.hasG3 && (
                 <div
                   role="alert"
-                  className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-3 leading-relaxed"
+                  className="p-4 rounded-xl bg-coral/10 border border-coral/30 text-xs text-coral flex items-start gap-3 leading-relaxed"
                 >
-                  <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-5 h-5 text-coral flex-shrink-0 mt-0.5" />
                   <div>
-                    <strong className="block font-semibold text-rose-800 dark:text-rose-300 mb-0.5">
+                    <strong className="block font-semibold mb-0.5">
                       Target Label &apos;G3&apos; Detected in Headers!
                     </strong>
                     <span>
@@ -391,15 +391,15 @@ export default function FacultyDatasetUploadPage() {
               {/* Pre-Upload Review Details & Preview */}
               {selectedFile && !clientError && (
                 <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <div className="flex items-center justify-between pb-3 border-b border-ink/5">
+                    <h3 className="text-xs font-bold text-ink/70 uppercase tracking-wider font-mono">
                       Pre-Upload File Summary
                     </h3>
                     <button
                       type="button"
                       onClick={handleRemoveFile}
                       disabled={isUploading}
-                      className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 inline-flex items-center gap-1 focus:outline-none"
+                      className="text-xs text-coral hover:underline inline-flex items-center gap-1 focus:outline-none"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Remove File</span>
@@ -407,30 +407,30 @@ export default function FacultyDatasetUploadPage() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                      <span className="text-[11px] font-semibold text-slate-400 block">Filename</span>
-                      <p className="font-bold text-slate-900 dark:text-white truncate mt-0.5">
+                    <div className="p-3 rounded-xl bg-paper border border-ink/10">
+                      <span className="text-[11px] font-semibold text-ink/50 block">Filename</span>
+                      <p className="font-bold text-ink truncate mt-0.5">
                         {selectedFile.name}
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                      <span className="text-[11px] font-semibold text-slate-400 block">File Size</span>
-                      <p className="font-bold text-slate-900 dark:text-white mt-0.5">
+                    <div className="p-3 rounded-xl bg-paper border border-ink/10">
+                      <span className="text-[11px] font-semibold text-ink/50 block">File Size</span>
+                      <p className="font-bold text-ink mt-0.5">
                         {formatBytes(selectedFile.size)}
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                      <span className="text-[11px] font-semibold text-slate-400 block">Detected Columns</span>
-                      <p className="font-bold text-slate-900 dark:text-white mt-0.5">
+                    <div className="p-3 rounded-xl bg-paper border border-ink/10">
+                      <span className="text-[11px] font-semibold text-ink/50 block">Detected Columns</span>
+                      <p className="font-bold text-ink mt-0.5">
                         {csvPreview ? `${csvPreview.headers.length} headers` : "Parsing..."}
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                      <span className="text-[11px] font-semibold text-slate-400 block">Inference Action</span>
-                      <p className={`font-bold mt-0.5 ${runPredictions ? "text-purple-600 dark:text-purple-400" : "text-indigo-600 dark:text-indigo-400"}`}>
+                    <div className="p-3 rounded-xl bg-paper border border-ink/10">
+                      <span className="text-[11px] font-semibold text-ink/50 block">Inference Action</span>
+                      <p className={`font-bold mt-0.5 ${runPredictions ? "text-edugreen" : "text-ink/80"}`}>
                         {runPredictions ? "Ingest + Run Predictions (SHAP)" : "Ingestion Only (No ML)"}
                       </p>
                     </div>
@@ -439,22 +439,22 @@ export default function FacultyDatasetUploadPage() {
                   {/* Lightweight CSV Table Preview */}
                   {csvPreview && csvPreview.headers.length > 0 && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center justify-between text-xs text-ink/60">
                         <span>Preview (First {csvPreview.totalPreviewRows} data rows):</span>
                         <span className="font-mono text-[11px]">
                           {csvPreview.headers.length} columns detected
                         </span>
                       </div>
 
-                      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 max-h-48">
+                      <div className="overflow-x-auto rounded-xl border border-ink/10 max-h-48">
                         <table className="w-full text-left text-xs font-mono" role="table">
-                          <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold sticky top-0">
+                          <thead className="bg-paper text-ink font-bold sticky top-0 border-b border-ink/10">
                             <tr>
                               {csvPreview.headers.map((h, i) => (
                                 <th
                                   key={i}
-                                  className={`py-2 px-2.5 whitespace-nowrap border-r border-slate-200 dark:border-slate-700 ${
-                                    h.toUpperCase() === "G3" ? "bg-rose-100 text-rose-800" : ""
+                                  className={`py-2 px-2.5 whitespace-nowrap border-r border-ink/10 ${
+                                    h.toUpperCase() === "G3" ? "bg-coral/20 text-coral" : ""
                                   }`}
                                 >
                                   {h}
@@ -462,13 +462,13 @@ export default function FacultyDatasetUploadPage() {
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                          <tbody className="divide-y divide-ink/5 text-ink/80">
                             {csvPreview.rows.map((row, rIdx) => (
-                              <tr key={rIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                              <tr key={rIdx} className="hover:bg-softgreen/10">
                                 {csvPreview.headers.map((_, cIdx) => (
                                   <td
                                     key={cIdx}
-                                    className="py-1.5 px-2.5 whitespace-nowrap border-r border-slate-100 dark:border-slate-800/60"
+                                    className="py-1.5 px-2.5 whitespace-nowrap border-r border-ink/5"
                                   >
                                     {row[cIdx] || ""}
                                   </td>
@@ -487,24 +487,24 @@ export default function FacultyDatasetUploadPage() {
               {uploadError && (
                 <div
                   role="alert"
-                  className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-900 dark:text-rose-200 space-y-2"
+                  className="p-4 rounded-xl bg-coral/10 border border-coral/20 text-xs text-coral space-y-2"
                 >
                   <div className="flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="w-4 h-4 text-coral flex-shrink-0 mt-0.5" />
                     <div>
                       <strong className="block font-semibold">Backend Ingestion Rejected</strong>
                       <p className="mt-0.5 font-medium leading-relaxed">{uploadError}</p>
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-rose-200/80 dark:border-rose-900/40 text-[11px] text-rose-700 dark:text-rose-400">
+                  <div className="p-2.5 rounded-lg bg-white border border-coral/20 text-[11px] text-coral">
                     <strong>Transaction Rollback:</strong> In accordance with PostgreSQL atomic transactions, zero academic records or student entities were persisted.
                   </div>
                 </div>
               )}
 
               {/* Opt-in Prediction Evaluation Checkbox */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+              <div className="p-4 rounded-xl bg-paper border border-ink/10 flex items-start gap-3">
                 <input
                   type="checkbox"
                   id="run-predictions-checkbox"
@@ -512,13 +512,13 @@ export default function FacultyDatasetUploadPage() {
                   checked={runPredictions}
                   onChange={(e) => setRunPredictions(e.target.checked)}
                   disabled={isUploading}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 cursor-pointer"
+                  className="mt-0.5 h-4 w-4 rounded border-ink/20 text-edugreen focus:ring-edugreen cursor-pointer accent-edugreen"
                 />
                 <label htmlFor="run-predictions-checkbox" className="text-xs cursor-pointer select-none space-y-0.5">
-                  <span className="font-bold text-slate-900 dark:text-white block">
+                  <span className="font-bold text-ink block">
                     Run risk predictions after upload
                   </span>
-                  <span className="text-slate-500 dark:text-slate-400 block text-[11px] leading-relaxed">
+                  <span className="text-ink/60 block text-[11px] leading-relaxed">
                     Automatically executes the machine learning model and computes SHAP factor attributions for all uploaded records in the same atomic database transaction.
                   </span>
                 </label>
@@ -526,7 +526,7 @@ export default function FacultyDatasetUploadPage() {
 
               {/* Upload Submit Action */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-ink/50">
                   {selectedFile
                     ? `Ready to upload ${selectedFile.name} (${formatBytes(selectedFile.size)})`
                     : "No file currently selected"}
@@ -535,11 +535,7 @@ export default function FacultyDatasetUploadPage() {
                 <button
                   type="submit"
                   disabled={!selectedFile || isUploading || !!clientError}
-                  className={`w-full sm:w-auto py-2.5 px-6 rounded-xl text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 ${
-                    runPredictions
-                      ? "bg-purple-600 hover:bg-purple-700 active:bg-purple-800 focus-visible:ring-purple-500"
-                      : "bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 focus-visible:ring-indigo-500"
-                  }`}
+                  className="w-full sm:w-auto py-2.5 px-6 rounded-xl text-white text-xs font-semibold shadow-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-edugreen bg-edugreen hover:bg-edugreen-dark active:scale-[0.99] btn-interactive"
                 >
                   {isUploading ? (
                     <>

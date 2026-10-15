@@ -24,7 +24,6 @@ import RiskDistributionChart from "@/components/analytics/RiskDistributionChart"
 import RiskTrendChart from "@/components/analytics/RiskTrendChart";
 import SchoolBreakdownCard from "@/components/analytics/SchoolBreakdownCard";
 import StudentsWorseningCard from "@/components/analytics/StudentsWorseningCard";
-import { useAuth } from "@/context/AuthContext";
 import { getFacultyAnalytics } from "@/lib/api/analytics";
 import { ApiClientError } from "@/lib/api/client";
 import { FacultyAnalyticsResponse } from "@/types/analytics";
@@ -40,8 +39,6 @@ function extractErrorMessage(err: unknown): string {
 }
 
 export default function FacultyDetailedAnalyticsPage() {
-  const { user } = useAuth();
-
   const [dataLoaded, setDataLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<FacultyAnalyticsResponse | null>(null);
@@ -49,7 +46,6 @@ export default function FacultyDetailedAnalyticsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isLoading = !dataLoaded && !errorMessage;
-  const roleTitle = user?.role === "admin" ? "Institutional Administrator" : "Faculty Member";
 
   const fetchAnalytics = async (selectedBucket: "day" | "week") => {
     try {
@@ -65,6 +61,7 @@ export default function FacultyDetailedAnalyticsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAnalytics(bucket);
   }, [bucket]);
 
@@ -89,12 +86,12 @@ export default function FacultyDetailedAnalyticsPage() {
 
   return (
     <RoleGuard allowedRoles={["faculty", "admin"]}>
-      <div className="max-w-6xl mx-auto space-y-7 pb-12">
+      <div className="max-w-6xl mx-auto space-y-7 pb-12 page-enter">
         {/* Navigation Breadcrumb */}
         <div className="flex items-center justify-between text-xs">
           <Link
             href="/dashboard/faculty"
-            className="inline-flex items-center gap-1.5 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold transition-colors"
+            className="inline-flex items-center gap-1.5 text-ink/60 hover:text-edugreen font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Faculty Dashboard</span>
@@ -102,24 +99,24 @@ export default function FacultyDetailedAnalyticsPage() {
 
           <Link
             href="/dashboard/faculty/students"
-            className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+            className="text-edugreen font-medium hover:underline"
           >
             Open Student Directory &rarr;
           </Link>
         </div>
 
-        {/* Detailed Hero Header */}
-        <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-indigo-700 via-indigo-600 to-blue-700 text-white shadow-lg shadow-indigo-700/10">
+        {/* Detailed Hero Header - Dark Ink Editorial Hero */}
+        <div className="p-6 sm:p-8 rounded-2xl bg-ink text-paper shadow-sm border border-ink/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-indigo-100 text-xs font-semibold mb-2.5 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-mint/15 text-mint text-xs font-medium mb-2.5 backdrop-blur-sm border border-mint/20">
                 <BarChart3 className="w-4 h-4" />
                 <span>PRD F9 / F11 Analytics &amp; Trends</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-display font-normal tracking-tight text-white">
                 Cohort Analytics &amp; Risk Intelligence
               </h1>
-              <p className="text-xs sm:text-sm text-indigo-100/90 mt-1.5 max-w-2xl leading-relaxed">
+              <p className="text-xs sm:text-sm text-paper/80 mt-1.5 max-w-2xl leading-relaxed">
                 Comprehensive class-level academic telemetry averages, temporal risk distribution trends, and deteriorating trajectory tracking across scoped students.
               </p>
             </div>
@@ -131,8 +128,8 @@ export default function FacultyDetailedAnalyticsPage() {
                   onClick={() => handleBucketChange("day")}
                   className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     bucket === "day"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-indigo-100 hover:text-white"
+                      ? "bg-white text-ink shadow-sm"
+                      : "text-paper/80 hover:text-white"
                   }`}
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -143,8 +140,8 @@ export default function FacultyDetailedAnalyticsPage() {
                   onClick={() => handleBucketChange("week")}
                   className={`py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                     bucket === "week"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-indigo-100 hover:text-white"
+                      ? "bg-white text-ink shadow-sm"
+                      : "text-paper/80 hover:text-white"
                   }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
@@ -156,7 +153,7 @@ export default function FacultyDetailedAnalyticsPage() {
                 type="button"
                 onClick={handleManualRefresh}
                 disabled={isRefreshing}
-                className="py-2 px-3.5 rounded-xl bg-white/20 hover:bg-white/30 active:bg-white/40 text-white text-xs font-semibold backdrop-blur-sm transition-all flex items-center gap-2"
+                className="py-2 px-3.5 rounded-xl bg-edugreen hover:bg-edugreen-dark text-white text-xs font-semibold transition-all flex items-center gap-2 shadow-sm"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
                 <span>{isRefreshing ? "Recalculating..." : "Refresh Trends"}</span>
@@ -169,11 +166,11 @@ export default function FacultyDetailedAnalyticsPage() {
         <div
           role="note"
           aria-label="Institutional privacy guarantee"
-          className="p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 text-xs flex items-start gap-3 leading-relaxed"
+          className="p-4 rounded-xl bg-softgreen/40 border border-edugreen/20 text-ink/80 text-xs flex items-start gap-3 leading-relaxed"
         >
-          <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+          <Shield className="w-5 h-5 text-edugreen flex-shrink-0 mt-0.5" />
           <div>
-            <strong className="block font-semibold mb-0.5">
+            <strong className="block font-semibold mb-0.5 text-ink">
               Population Anonymity Guarantee &amp; Zero Target Leakage
             </strong>
             <span>
@@ -184,9 +181,9 @@ export default function FacultyDetailedAnalyticsPage() {
 
         {/* Loading State */}
         {isLoading && (
-          <div className="p-16 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+          <div className="p-16 rounded-2xl bg-white border border-ink/10 text-center flex flex-col items-center justify-center space-y-3">
+            <Loader2 className="w-8 h-8 text-edugreen animate-spin" />
+            <p className="text-sm font-semibold text-ink/70">
               Aggregating longitudinal trends and telemetry averages...
             </p>
           </div>
@@ -297,9 +294,9 @@ export default function FacultyDetailedAnalyticsPage() {
                 )}
 
                 {/* Footer Metadata */}
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/80">
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-ink/60 border-t border-ink/10">
                   <div className="flex items-center gap-2">
-                    <Cpu className="w-3.5 h-3.5 text-indigo-500" />
+                    <Cpu className="w-3.5 h-3.5 text-edugreen" />
                     <span>
                       Active Model: <strong>{analytics.model_version}</strong> (Phase 1 Logistic Regression Pipeline)
                     </span>

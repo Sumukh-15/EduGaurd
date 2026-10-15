@@ -73,7 +73,11 @@ class MLService:
 
             # Initialize SHAP explainer with trained pipeline
             logger.info("Initializing EduGuard SHAP explainer...")
-            self.explainer = EduGuardExplainer(trained_pipeline=self.pipeline)
+            train_split_path = settings.PROJECT_ROOT / "data" / "processed" / "train_split.csv"
+            self.explainer = EduGuardExplainer(
+                trained_pipeline=self.pipeline,
+                train_split_path=train_split_path,
+            )
 
             self.is_ready = True
             logger.info("MLService successfully initialized with model %s.", self.model_version)

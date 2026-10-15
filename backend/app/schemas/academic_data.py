@@ -8,7 +8,7 @@ STRICT ANTI-LEAKAGE GUARANTEE:
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -68,6 +68,9 @@ class AcademicRecordCreate(AcademicRecordBase):
     """Payload for submitting a new academic telemetry record for a student."""
 
     term: str = Field(default="Term 1", max_length=20, description="Academic period or assessment term")
+    data_source: Optional[str] = Field(default="faculty_verified", max_length=50, description="Data provenance: 'faculty_verified' or 'self_reported'")
+    subject: Optional[str] = Field(default=None, max_length=100, description="Academic course / subject")
+    assessment_name: Optional[str] = Field(default=None, max_length=100, description="Specific assessment name")
 
 
 class AcademicRecordRead(AcademicRecordBase):
@@ -77,5 +80,50 @@ class AcademicRecordRead(AcademicRecordBase):
     student_id: int
     term: str
     recorded_at: datetime
+    data_source: Optional[str] = "faculty_verified"
+    subject: Optional[str] = None
+    assessment_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StudentSelfReportUpdate(BaseModel):
+    """Student self-reported study habits update.
+
+    Students cannot edit official faculty-verified grades (G1, G2), absences, or failures.
+    These fields capture self-reported weekly study hours and optional support information.
+    """
+
+    studytime: int = Field(..., ge=1, le=4, description="Weekly study time (1: <2 hrs, 2: 2-5 hrs, 3: 5-10 hrs, 4: >10 hrs)")
+    freetime: Optional[int] = Field(None, ge=1, le=5, description="Free time after school (1: very low to 5: very high)")
+    schoolsup: Optional[Literal["yes", "no"]] = Field(None, description="Extra educational support")
+    famsup: Optional[Literal["yes", "no"]] = Field(None, description="Family educational support")
+    paid: Optional[Literal["yes", "no"]] = Field(None, description="Extra paid classes within the course subject")
+    activities: Optional[Literal["yes", "no"]] = Field(None, description="Extra-curricular activities")
+    recalculate_risk: bool = Field(default=True, description="Whether to immediately recalculate risk assessment with the new study info")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FacultyAcademicUpdate(BaseModel):
+    """Faculty assessment and attendance recording.
+
+    Validates input marks and converts to standard 0-20 scale.
+    """
+
+    subject: str = Field(..., min_length=1, max_length=100, description="Subject name (e.g. Mathematics)")
+    assessment_name: str = Field(..., min_length=1, max_length=100, description="Assessment name (e.g. Midterm 2)")
+    marks: float = Field(..., ge=0.0, description="Marks obtained")
+    max_marks: float = Field(default=20.0, gt=0.0, description="Maximum possible marks for this assessment")
+    absences: int = Field(..., ge=0, le=93, description="Recorded absences")
+    term: Optional[str] = Field(default="Term 2", max_length=20, description="Assessment period / Term")
+    recalculate_risk: bool = Field(default=True, description="Whether to immediately run risk prediction")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_marks(self) -> "FacultyAcademicUpdate":
+        if self.marks > self.max_marks:
+            raise ValueError(f"Marks ({self.marks}) cannot exceed maximum marks ({self.max_marks}).")
+        return self
+

@@ -1,10 +1,9 @@
-"""Pydantic schemas for student academic trajectories and prediction history."""
-
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.schemas.academic_data import AcademicRecordRead
+from backend.app.schemas.prediction import FactorContributionRead
 
 
 class PredictionHistoryItem(BaseModel):
@@ -18,6 +17,10 @@ class PredictionHistoryItem(BaseModel):
     at_risk_binary: int = Field(..., description="Binary classification (1: at risk, 0: safe)")
     model_version: str = Field(..., description="Model version tag used for inference")
     created_at: datetime = Field(..., description="Inference timestamp (UTC)")
+    top_factors: List[FactorContributionRead] = Field(
+        default_factory=list,
+        description="Top contributing SHAP factors for this prediction",
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -2,16 +2,27 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Clock, GraduationCap, Lightbulb, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle,
+  Clock,
+  GraduationCap,
+  Lightbulb,
+  LineChart,
+  Loader2,
+  Shield,
+} from "lucide-react";
 import RoleGuard from "@/components/layout/RoleGuard";
 import EmptyStateCard from "@/components/student/EmptyStateCard";
 import ExplainabilityView from "@/components/student/ExplainabilityView";
 import RiskGaugeCard from "@/components/student/RiskGaugeCard";
 import StudentIdentityCard from "@/components/student/StudentIdentityCard";
+import StudentAcademicDataCard from "@/components/student/StudentAcademicDataCard";
 import { useAuth } from "@/context/AuthContext";
 import { ApiClientError } from "@/lib/api/client";
 import { getStudentHistory, getStudentProfile, predictStudentRisk } from "@/lib/api/students";
 import {
+  AcademicUpdateResponse,
   FactorContribution,
   PredictionHistoryItem,
   StudentDetail,
@@ -33,6 +44,7 @@ export default function StudentDashboardPage() {
 
   const [dataLoaded, setDataLoaded] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [history, setHistory] = useState<StudentHistoryResponse | null>(null);
   const [currentPrediction, setCurrentPrediction] = useState<PredictionHistoryItem | null>(null);
@@ -53,7 +65,6 @@ export default function StudentDashboardPage() {
 
     async function fetchData() {
       try {
-        // Fetch institutional profile & longitudinal history in parallel
         const [profileData, historyData] = await Promise.all([
           getStudentProfile(studentId!),
           getStudentHistory(studentId!, "desc"),
@@ -68,8 +79,14 @@ export default function StudentDashboardPage() {
         if (historyData.latest_prediction) {
           setCurrentPrediction(historyData.latest_prediction);
 
-          // Check if top_factors were cached for this student's latest evaluation
-          if (typeof window !== "undefined") {
+          // If backend provided top_factors directly from DB
+          if (
+            historyData.latest_prediction.top_factors &&
+            historyData.latest_prediction.top_factors.length > 0
+          ) {
+            setFactors(historyData.latest_prediction.top_factors);
+          } else if (typeof window !== "undefined") {
+            // Fallback to cached factors if present
             const cachedFactorsKey = `eduguard_shap_factors_${studentId}`;
             const cached = sessionStorage.getItem(cachedFactorsKey);
             if (cached) {
@@ -88,9 +105,6 @@ export default function StudentDashboardPage() {
             }
           }
         }
-        // Note: If no prediction exists yet, EmptyStateCard (type='no_prediction')
-        // is displayed with an explicit 'Generate Risk Evaluation' user action.
-        // Opening or refreshing the page remains strictly read-only.
       } catch (err: unknown) {
         if (isMounted) {
           setErrorMessage(extractErrorMessage(err));
@@ -127,10 +141,11 @@ export default function StudentDashboardPage() {
         at_risk_binary: predResponse.at_risk_binary,
         model_version: predResponse.model_version,
         created_at: predResponse.created_at,
+        top_factors: predResponse.top_factors,
       };
 
       setCurrentPrediction(newPredItem);
-      setFactors(predResponse.top_factors);
+      setFactors(predResponse.top_factors || []);
       setCausalDisclaimer(predResponse.causal_disclaimer);
 
       if (typeof window !== "undefined") {
@@ -143,6 +158,10 @@ export default function StudentDashboardPage() {
           })
         );
       }
+
+      // Refresh history records
+      const updatedHistory = await getStudentHistory(studentId, "desc");
+      setHistory(updatedHistory);
     } catch (err: unknown) {
       setErrorMessage(extractErrorMessage(err));
     } finally {
@@ -150,29 +169,67 @@ export default function StudentDashboardPage() {
     }
   };
 
+  // Callback when student submits self-reported update
+  const handleUpdateSuccess = async (res: AcademicUpdateResponse) => {
+    setSuccessToast("Your study information was saved, and your risk assessment was updated.");
+    setTimeout(() => setSuccessToast(null), 5000);
+
+    if (res.prediction) {
+      const pred = res.prediction;
+      const newPredItem: PredictionHistoryItem = {
+        id: pred.prediction_id,
+        student_id: pred.student_id,
+        academic_record_id: pred.academic_record_id,
+        risk_probability: pred.risk_probability,
+        risk_level: pred.risk_level,
+        at_risk_binary: pred.at_risk_binary,
+        model_version: pred.model_version,
+        created_at: pred.created_at,
+        top_factors: pred.top_factors,
+      };
+
+      setCurrentPrediction(newPredItem);
+      setFactors(pred.top_factors || []);
+      setCausalDisclaimer(pred.causal_disclaimer);
+    }
+
+    // Refresh history
+    if (studentId) {
+      try {
+        const updatedHistory = await getStudentHistory(studentId, "desc");
+        setHistory(updatedHistory);
+      } catch {
+        // Non-blocking
+      }
+    }
+  };
+
+  const latestAcademicRecord = history?.academic_records?.[0];
+
   return (
     <RoleGuard allowedRoles={["student"]}>
-      <div className="max-w-6xl mx-auto space-y-7">
+      <div className="max-w-6xl mx-auto space-y-7 page-enter">
         {/* Welcome Banner */}
-        <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 text-white shadow-lg shadow-emerald-700/10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-6 sm:p-8 rounded-2xl bg-ink text-white shadow-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-48 h-48 rounded-full bg-edugreen/15 blur-2xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-emerald-100 text-xs font-semibold mb-2.5 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-mint/25 text-mint text-xs font-medium mb-2.5">
                 <GraduationCap className="w-4 h-4" />
-                <span>Student Academic Portal</span>
+                <span>Student Academic Portal • Growth &amp; Trajectory</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-display tracking-tight">
                 Welcome back, {user?.full_name || "Student"}
               </h1>
-              <p className="text-xs sm:text-sm text-emerald-100/90 mt-1.5 max-w-2xl leading-relaxed">
-                EduGuard analyzes your historical attendance, midterm scores, and academic indicators to provide early-warning decision support and personalized interventions.
+              <p className="text-xs sm:text-sm text-white/75 mt-1.5 max-w-2xl leading-relaxed">
+                EduGuard brings together verified faculty assessment scores and your self-reported study habits to help you stay on track and get support when you need it.
               </p>
             </div>
 
             {user?.student_code && (
-              <div className="p-3.5 bg-white/10 rounded-xl text-left sm:text-right backdrop-blur-sm self-start sm:self-auto border border-white/10">
-                <p className="text-[11px] text-emerald-200 uppercase tracking-wider font-semibold">
-                  Student ID Code
+              <div className="p-3.5 bg-white/5 rounded-xl text-left sm:text-right backdrop-blur-xs self-start sm:self-auto border border-white/10">
+                <p className="text-xs text-mint font-medium">
+                  Student ID code
                 </p>
                 <p className="text-base font-mono font-bold text-white mt-0.5">
                   {user.student_code}
@@ -182,12 +239,20 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
+        {/* Success Toast / Notification */}
+        {successToast && (
+          <div className="p-4 rounded-xl bg-softgreen border border-edugreen/30 text-edugreen text-xs font-semibold flex items-center gap-2.5 shadow-xs animate-in fade-in duration-200">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{successToast}</span>
+          </div>
+        )}
+
         {/* Loading State */}
         {isLoading && (
-          <div className="p-16 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-              Retrieving academic indicators & risk evaluation...
+          <div className="p-16 rounded-2xl bg-white border border-ink/10 text-center flex flex-col items-center justify-center space-y-3 paper-surface">
+            <Loader2 className="w-8 h-8 text-edugreen animate-spin" />
+            <p className="text-sm font-semibold text-ink/70">
+              Retrieving your academic records &amp; assessment...
             </p>
           </div>
         )}
@@ -212,12 +277,21 @@ export default function StudentDashboardPage() {
               totalPredictions={history?.total_predictions || 0}
             />
 
-            {/* 2. No Academic Telemetry State */}
+            {/* 2. Official Academic Data vs Self-Reported Habits Card with Update Action */}
+            {studentId && (
+              <StudentAcademicDataCard
+                studentId={studentId}
+                latestRecord={latestAcademicRecord}
+                onUpdateSuccess={handleUpdateSuccess}
+              />
+            )}
+
+            {/* 3. No Academic Data State */}
             {history && history.total_records === 0 && (
               <EmptyStateCard type="no_academic_data" />
             )}
 
-            {/* 3. Has Telemetry But No Prediction State */}
+            {/* 4. Has Data But No Prediction State */}
             {history && history.total_records > 0 && !currentPrediction && (
               <EmptyStateCard
                 type="no_prediction"
@@ -226,57 +300,162 @@ export default function StudentDashboardPage() {
               />
             )}
 
-            {/* 4. Active Risk Assessment & Explainability View */}
+            {/* 5. Supportive Non-Causal Ethics Disclaimer */}
             {currentPrediction && (
-              <>
-                <RiskGaugeCard
-                  prediction={currentPrediction}
-                  academicRecordId={currentPrediction.academic_record_id}
-                  onRefreshFactors={handleEvaluate}
-                  isRefreshing={isEvaluating}
-                />
-
-                <ExplainabilityView
-                  factors={factors}
-                  causalDisclaimer={causalDisclaimer}
-                  onRequestFactors={handleEvaluate}
-                  isLoadingFactors={isEvaluating}
-                />
-              </>
+              <div className="p-4.5 rounded-2xl bg-white border border-edugreen/25 shadow-xs relative overflow-hidden">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-softgreen text-edugreen flex items-center justify-center shrink-0 mt-0.5">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs text-ink/80 leading-relaxed">
+                    <span className="font-bold text-ink block mb-0.5">
+                      Supportive Non-Causal Early-Warning Notice
+                    </span>
+                    <p>
+                      Risk calculations represent statistical associations based on historical cohort patterns—
+                      <strong className="text-ink">
+                        they are not causal mechanisms and do not define your innate potential or academic ability
+                      </strong>
+                      . All insights serve exclusively as constructive decision support to guide human advising and personalized study habits.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
 
-            {/* 5. Navigation Links to History & Recommendations */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2">
+            {/* 6. Question 1 & 2 & 5: How am I doing? What is my current risk? When was my data last updated? */}
+            {currentPrediction && (
+              <RiskGaugeCard
+                prediction={currentPrediction}
+                academicRecordId={currentPrediction.academic_record_id}
+                onRefreshFactors={handleEvaluate}
+                isRefreshing={isEvaluating}
+              />
+            )}
+
+            {/* 7. Question 3: Why is my risk at this level? (SHAP Explainability) */}
+            {currentPrediction && (
+              <ExplainabilityView
+                factors={factors}
+                causalDisclaimer={causalDisclaimer}
+                onRequestFactors={handleEvaluate}
+                isLoadingFactors={isEvaluating}
+              />
+            )}
+
+            {/* 8. Question 4: What should I do next? (Actionable Guidance Card) */}
+            <div className="p-6 sm:p-7 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-ink/10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-softgreen text-edugreen flex items-center justify-center flex-shrink-0">
+                    <Lightbulb className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-ink-muted block">
+                      Recommended steps
+                    </span>
+                    <h2 className="text-lg font-display text-ink mt-0.5 tracking-tight">
+                      What Should I Do Next?
+                    </h2>
+                  </div>
+                </div>
+
+                <Link
+                  href="/dashboard/student/recommendations"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-edugreen hover:bg-edugreen-dark active:scale-[0.99] text-white text-xs font-medium shadow-sm transition-all duration-200 self-start sm:self-auto btn-interactive"
+                >
+                  <span>View All Recommendations</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {currentPrediction?.risk_level === "Low" ? (
+                <div className="p-4 rounded-xl bg-softgreen border border-edugreen/25 text-xs text-ink space-y-1">
+                  <p className="font-bold text-sm text-edugreen">
+                    &quot;You&apos;re currently on track. No urgent interventions are recommended.&quot;
+                  </p>
+                  <p className="text-ink/75 leading-relaxed">
+                    Keep attending classes regularly, stay on top of upcoming assignments, and maintain your weekly study routine.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-amber/15 border border-amber/35 text-xs text-ink space-y-1">
+                  <p className="font-bold text-sm text-ink">
+                    Targeted recommendations are available based on your latest indicators.
+                  </p>
+                  <p className="text-ink/80 leading-relaxed">
+                    Review specific guidance on exam preparation, syllabus topics, or attendance check-ins with your faculty mentor.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 9. Navigation Links to Detailed Student Subpages */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
               <Link
-                href="/dashboard/student/history"
-                className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all group flex items-start gap-4"
+                href="/dashboard/student/risk"
+                className="p-5 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface-interactive group flex flex-col justify-between transition-all"
               >
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                  <Clock className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-softgreen text-edugreen flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Shield className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Explore Academic History
+                  <h3 className="text-sm font-bold text-ink group-hover:text-edugreen transition-colors">
+                    Risk &amp; SHAP Analysis
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                    View chronological semester records, grade changes, and past evaluation trajectory.
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Dedicated on-demand evaluation, factor breakdown, and model confidence.
+                  </p>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/student/performance"
+                className="p-5 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface-interactive group flex flex-col justify-between transition-all"
+              >
+                <div className="w-10 h-10 rounded-xl bg-softgreen text-edugreen flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <LineChart className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink group-hover:text-edugreen transition-colors">
+                    Academic Performance
+                  </h3>
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    G1/G2 trajectory charts, attendance tracking, and grade velocity delta.
+                  </p>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/student/history"
+                className="p-5 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface-interactive group flex flex-col justify-between transition-all"
+              >
+                <div className="w-10 h-10 rounded-xl bg-softgreen text-edugreen flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink group-hover:text-edugreen transition-colors">
+                    Academic History Log
+                  </h3>
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Chronological audit log of all term records and grade entries.
                   </p>
                 </div>
               </Link>
 
               <Link
                 href="/dashboard/student/recommendations"
-                className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700 transition-all group flex items-start gap-4"
+                className="p-5 rounded-2xl bg-white border border-ink/10 shadow-sm paper-surface-interactive group flex flex-col justify-between transition-all"
               >
-                <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                  <Lightbulb className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-paper border border-ink/10 text-amber flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                  <Lightbulb className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Targeted Interventions
+                  <h3 className="text-sm font-bold text-ink group-hover:text-edugreen transition-colors">
+                    Recommendations
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                    Review actionable recommendations tailored to study habits, attendance, and exam prep.
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Personalized study strategies, habit adjustments, and mentorship advice.
                   </p>
                 </div>
               </Link>
